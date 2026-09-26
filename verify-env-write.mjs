@@ -134,6 +134,29 @@ console.log('\n--- unset ---')
   ok('new revision after unset', after.revision !== before.revision)
 }
 
+// ── 3b. `set` 不带 value ───────────────────────────────────────────────────
+// 回归：曾经校验用 `edit.value ?? ''`、写入却直接传 `edit.value`，于是 HTTP 上
+// 一个不带 value 的 set 会把**字面量 `"undefined"`** 写进文件。
+console.log('\n--- set without value ---')
+{
+  seed('KEEP="1"\nEXISTING="old"\n')
+  const after = await applyEnvEdits({
+    path: file,
+    layer: 'project-env',
+    edits: [
+      { op: 'set', name: 'NO_VALUE' },
+      { op: 'set', name: 'EXISTING' },
+      { op: 'set', name: 'EMPTY_ON_PURPOSE', value: '' },
+    ],
+  })
+  ok('a set without value does not write the literal "undefined"', !read().includes('undefined'), JSON.stringify(read()))
+  ok('a set without value writes an empty value', after.values.NO_VALUE === '', JSON.stringify(after.values.NO_VALUE))
+  ok('an existing key is overwritten to empty as well', after.values.EXISTING === '')
+  ok('an explicit empty value behaves the same', after.values.EMPTY_ON_PURPOSE === '')
+  ok('the in-memory value matches the file for every edit', read().includes('NO_VALUE=""') && read().includes('EXISTING=""'))
+  ok('untouched lines stay byte-identical', read().split('\n')[0] === 'KEEP="1"', JSON.stringify(read()))
+}
+
 // ── 4. 行尾风格保留（CRLF）─────────────────────────────────────────────────
 console.log('\n--- line ending preservation ---')
 {

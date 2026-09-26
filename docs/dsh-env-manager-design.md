@@ -2301,20 +2301,44 @@ TypeScript 的唯一正当理由是**把已经写在注释里的契约变成编�
 第二轮驱动里 `useEffect(…, [load])` 因为依赖没变而不重跑，fetch 序列与第一轮
 不同 —— 那是探针噪音。每轮驱动前清空 store（等价于"重新挂载页签"）。
 
-### 31.4 类型化过程中发现的两个真实缺陷（**只报告，未修**）
+### 31.4 类型化过程中发现的两个真实缺陷
 
-修它们会改变行为，而这一步的纪律是"等价"，所以留作独立的修复项：
+发现它们的是类型检查：`serializeDotEnvLine(key, value)` 的 `value` 被推断成
+`string | undefined` 时，才有人问"那 `undefined` 会变成什么"。
 
-1. **`{op:'set'}` 不带 `value` 会写入字面量 `"undefined"`。**
-   `applyEnvEdits` 校验时用 `edit.value ?? ''`，写入时用
-   `serializeDotEnvLine(edit.name, edit.value)`，`undefined` 被 `String()` 成
-   `"undefined"`。已在 `lib` 与 `src` 两侧复现：
-   `NO_VALUE="undefined"`。HTTP 可达：`POST /api/env-manager/env` 带
-   `{layer, edits:[{op:'set', name:'FOO'}]}`。
-2. **"空值"那条提醒文案是死的。** `representabilityOf('K=""')` 返回
-   `{reason:'空值…', lossy:false}`，而 `validateEdit` 只在 `issue.lossy === true`
-   时记问题 —— 于是 `{op:'set', value:''}` 静默通过，写入 `X=""`，
-   而凭据域把空值当作未设置。
+**① 已修（附回归断言）。`{op:'set'}` 不带 `value` 曾写入字面量 `"undefined"`。**
+
+`applyEnvEdits` 校验可表示性时用 `edit.value ?? ''`，写入时却直接传
+`edit.value`，`String(undefined)` 得到 `"undefined"`。已在 `lib` 与 `src` 两侧
+复现；HTTP 可达：`POST /api/env-manager/env` 带 `{layer, edits:[{op:'set',name:'FOO'}]}`
+会让文件里出现 `FOO="undefined"` —— 一个看起来正常、实际是垃圾的值。
+
+修法是让写入与校验用同一套语义：
+
+```ts
+const value = edit.value ?? ''
+const content = serializeDotEnvLine(seg.key, value)
+next[i] = { kind: 'entry', raw: content + eol, content, key: seg.key, value }
+```
+
+注意最后一行的 `value`（内存里的值）也必须跟着改 —— 落盘内容与 `after.values`
+不一致是更隐蔽的第二个 bug。
+
+`verify-env-write.mjs` 新增 `--- set without value ---` 一节 6 项断言钉住它
+（含"未触及的行仍逐字节保留"）。总断言数 109 → 115。
+
+**② 未修（需要一次策略决定）。`{op:'set', value:''}` 静默通过。**
+
+`representabilityOf('K=""')` 返回 `{reason:'空值…', lossy:false}`，而
+`validateEdit` 只在 `issue.lossy === true` 时记问题 —— 于是"空值"那条提醒永远
+不可达，`{op:'set', value:''}` 会写进 `X=""`。而凭据域把空值**视为未设置**，
+所以对一个凭据形状的名字来说，界面显示"已设置"、DSH 内部却读不到值。
+
+不顺手改的原因：`validateEdit` 的 problem 会让整个写请求以 400 被拒，所以
+"把空值当问题"等于**禁止**把变量设成空串 —— 这是产品决策（拒绝？还是仅告警？），
+不是显而易见的 bug。空串在 `.env` 里还有一层影响：`loadLayeredEnv` 的
+`if (process.env[name] === void 0)` 只判"缺不缺"，不判空，所以 `X=""` 会**占位**
+并遮蔽更低优先级的同名变量。
 
 ### 31.5 迁移后的形态
 

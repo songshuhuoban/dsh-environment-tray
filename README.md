@@ -43,13 +43,13 @@ dsh web
 
 ## 验证
 
-### 测试套件（10 个可运行文件，1046 项断言）
+### 测试套件（10 个可运行文件，1052 项断言）
 
 ```powershell
 pnpm run build                    # 套件测的是 lib/*.js，所以先构建
 node check-p0.mjs                 # 插件形态 + 客户端 bundle（36）
 node verify-env-model.mjs         # 复合模型、差分测试、禁止名单保真（192）
-node verify-env-write.mjs         # 结构保留、CAS、并发、BOM（109）
+node verify-env-write.mjs         # 结构保留、CAS、并发、BOM（115）
 node verify-credentials.mjs       # 密钥零泄露与遮蔽分类（52）
 node verify-host-api.mjs          # 读路由、投影、reg.exe 执行器（97）
 node verify-registry.mjs          # 注册表解析、类型保留、并入模型（82）

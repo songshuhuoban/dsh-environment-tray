@@ -327,16 +327,22 @@ function applyEditsToSegments(segments: readonly DotEnvSegment[], edits: readonl
     if (edit.op === 'unset') {
       next[i] = { kind: 'removed', raw: null }
     } else {
-      const content = serializeDotEnvLine(seg.key, edit.value)
-      next[i] = { kind: 'entry', raw: content + eol, content, key: seg.key, value: edit.value }
+      // `?? ''`：`validateEdit` 判定可表示性时用的就是 `edit.value ?? ''`，
+      // 这里必须用同一套语义。曾经直接传 `edit.value`，于是 HTTP 上传一个
+      // 不带 value 的 set 会把字面量 `"undefined"` 写进文件（下面的 `value`
+      // 字段同理 —— 它是内存里的值，不能与落盘的内容不一致）。
+      const value = edit.value ?? ''
+      const content = serializeDotEnvLine(seg.key, value)
+      next[i] = { kind: 'entry', raw: content + eol, content, key: seg.key, value }
     }
   }
 
   // 第二遍：新增键追加到末尾（保持用户原有顺序不动）
   for (const edit of pending.values()) {
     if (edit.op === 'unset') continue
-    const content = serializeDotEnvLine(edit.name, edit.value)
-    next.push({ kind: 'entry', raw: content + eol, content, key: edit.name, value: edit.value })
+    const value = edit.value ?? ''
+    const content = serializeDotEnvLine(edit.name, value)
+    next.push({ kind: 'entry', raw: content + eol, content, key: edit.name, value })
   }
 
   return next.filter((s): s is DotEnvSegment => s.kind !== 'removed')
