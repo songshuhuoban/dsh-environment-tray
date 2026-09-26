@@ -17,12 +17,120 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
-import { buildEnvironmentModel, BLOCKED_REASON_TEXT } from './env-model.mjs'
-import { credentialAccessOf } from './credentials.mjs'
-import { mergeOsLayers, OsEnvironmentLayer, USER_SCOPE, MACHINE_SCOPE } from './registry.mjs'
-import { createRequestGuard, CREDENTIAL_ROUTE, ENV_ROUTE, REGISTRY_ROUTE } from './write-routes.mjs'
+import { buildEnvironmentModel, BLOCKED_REASON_TEXT } from './env-model'
+import { credentialAccessOf } from './credentials'
+import { mergeOsLayers, OsEnvironmentLayer, USER_SCOPE, MACHINE_SCOPE } from './registry'
+import { createRequestGuard, CREDENTIAL_ROUTE, ENV_ROUTE, REGISTRY_ROUTE } from './write-routes'
+
+import type { OsScopeReads } from './registry'
+import type { WriteRouteHandlers } from './write-routes'
+import type {
+  ConnectionService,
+  CredentialProvider,
+  EnvLayerId,
+  EnvParseWarning,
+  EnvironmentModel,
+  IncomingRequest,
+  Logger,
+  ServerResponse,
+  WebServerService,
+} from './types'
 
 const execFileAsync = promisify(execFile)
+
+/* ────────────────────────── 传输视图（响应体的形状）────────────────────────── */
+
+/** 值摘要（`summarizeValue()` 的结果）。 */
+export interface ValueSummary {
+  /** 展示用文本；长值只给首尾片段。 */
+  preview: string
+  /** **真实**长度（不是 `preview` 的长度）。 */
+  length: number
+  truncated: boolean
+}
+
+/**
+ * 传输视图里的一个层。
+ *
+ * ⚠️ `redacted` 与 `valueSummary` **互斥**，这是安全约束而不是风格问题：
+ * 敏感名的层只允许带 `valueLength`，任何能还原出值的字段都不许出现
+ * （见 `projectState()`；verify-host-api.mjs 有 "NO VALUE FIELD" 断言守着）。
+ */
+export interface ProjectedLayer {
+  layer: EnvLayerId | string
+  writable: boolean
+  /** 值的来源文件绝对路径。 */
+  path?: string
+  /** 不可写的机器可读原因码；文案由客户端查 `blockedReasonText`。 */
+  blockedCode?: string
+  /** 注册表原始类型；`REG_EXPAND_SZ` 必须原样带回。 */
+  registryType?: string
+  /** 写系统级注册表需要提权。 */
+  requiresElevation?: true
+  /** 敏感名标记：只有长度，绝无值。 */
+  redacted?: true
+  /** 值的长度（敏感名与 `reveal=0` 时只有它）。 */
+  valueLength?: number
+  /** 值摘要；敏感名**永远**不会有它。 */
+  valueSummary?: ValueSummary
+}
+
+/** 传输视图里的一个变量。 */
+export interface ProjectedVariable {
+  name: string
+  effective?: EnvLayerId | string
+  shadowed: boolean
+  forbidden: boolean
+  sensitive: boolean
+  runtimeManaged: boolean
+  /** 该变量的层数：>1 表示存在遮蔽竞争。 */
+  layerCount: number
+  layers: ProjectedLayer[]
+}
+
+/** 单个作用域的读取状态。 */
+export interface OsScopeStatus {
+  /** 失败原因；成功时为 null（客户端按 `null` 判断"这一层没问题"）。 */
+  error: string | null
+  count: number
+}
+
+/** 逐作用域的状态；键与 `USER_SCOPE` / `MACHINE_SCOPE` 一致。 */
+export type OsScopeStatuses = Record<typeof USER_SCOPE | typeof MACHINE_SCOPE, OsScopeStatus>
+
+/** OS 环境层的状态（由 `/state` 处理器附上）。 */
+export interface OsStatus {
+  supported: boolean
+  /** `os=0`：本次刻意跳过了注册表读取。 */
+  skipped?: true
+  /** 读取过注册表时才有。 */
+  scopes?: OsScopeStatuses
+}
+
+/** `projectState()` 的结果 —— `/state` 的响应体。 */
+export interface ProjectedState {
+  cwd: string
+  home: string
+  files: { project: string | null; user: string | null }
+  warnings: EnvParseWarning[]
+  blockedReasonText: typeof BLOCKED_REASON_TEXT
+  counts: {
+    total: number
+    shadowed: number
+    forbidden: number
+    sensitive: number
+    runtimeManaged: number
+  }
+  variables: ProjectedVariable[]
+  /** OS 层状态；只有 `/state` 处理器会补上它。 */
+  os?: OsStatus
+}
+
+/** `projectState()` 的选项。 */
+export interface ProjectStateOptions {
+  /** 是否包含值。默认 true；敏感名永远不含。 */
+  revealValues?: boolean
+}
 
 /**
  * 真实的 `reg.exe` 执行器。
@@ -34,13 +142,17 @@ const execFileAsync = promisify(execFile)
  * @param args - `reg.exe` 参数。
  * @returns stdout 原始字节。
  */
-export async function runReg(args) {
+export async function runReg(args: string[]): Promise<Buffer> {
   const { stdout } = await execFileAsync('reg.exe', args, {
     windowsHide: true,
     maxBuffer: 8 * 1024 * 1024,
     encoding: 'buffer',
   })
-  return stdout
+  // `encoding: 'buffer'` 时 Node 保证 stdout 是 Buffer，但 `promisify()` 的
+  // CustomPromisify 只按 `execFile.__promisify__` 的**最后一个重载**推导类型
+  // （`string | Buffer`），所以这里显式断言。这一条由 verify-host-api.mjs 的
+  // `Buffer.isBuffer(buffer)` 守着。
+  return stdout as Buffer
 }
 
 /** 值的展示上限：超过就摘要化。 */
@@ -63,7 +175,7 @@ export const CREDENTIAL_STATE_ROUTE = '/api/env-manager/credential-state'
  * @param value - 原始值。
  * @returns 展示视图 `{ preview, length, truncated }`。
  */
-export function summarizeValue(value) {
+export function summarizeValue(value: unknown): ValueSummary {
   const text = String(value)
   if (text.length <= VALUE_PREVIEW_LIMIT) {
     return { preview: text, length: text.length, truncated: false }
@@ -81,10 +193,10 @@ export function summarizeValue(value) {
  * @param options.revealValues - 是否包含值。默认 true；敏感名永远不含。
  * @returns 可 JSON 序列化的视图。
  */
-export function projectState(model, options = {}) {
+export function projectState(model: EnvironmentModel, options: ProjectStateOptions = {}): ProjectedState {
   const revealValues = options.revealValues !== false
 
-  const variables = model.variables.map((variable) => ({
+  const variables: ProjectedVariable[] = model.variables.map((variable) => ({
     name: variable.name,
     effective: variable.effective,
     shadowed: variable.shadowed,
@@ -93,8 +205,8 @@ export function projectState(model, options = {}) {
     runtimeManaged: variable.runtimeManaged,
     /** 该变量的层数：>1 表示存在遮蔽竞争。 */
     layerCount: variable.layers.length,
-    layers: variable.layers.map((layer) => {
-      const entry = {
+    layers: variable.layers.map((layer): ProjectedLayer => {
+      const entry: ProjectedLayer = {
         layer: layer.layer,
         writable: layer.writable,
         ...layer.path === undefined ? {} : { path: layer.path },
@@ -141,11 +253,6 @@ export function projectState(model, options = {}) {
     warnings: model.warnings ?? [],
     /** 文案表：与层里的 `blockedCode` 配合使用，只传一次而不是每行一份。 */
     blockedReasonText: BLOCKED_REASON_TEXT,
-    /**
-     * 解析诊断（当前只有 BOM）。UI **必须**显示它们：带 BOM 的文件里第一个
-     * 变量名对 DSH 而言与界面显示的不同，静默处理等于隐瞒。
-     */
-    warnings: model.warnings ?? [],
     counts: {
       total: variables.length,
       shadowed: variables.filter((v) => v.shadowed).length,
@@ -158,6 +265,72 @@ export function projectState(model, options = {}) {
 }
 
 /**
+ * `ctx.inject([...], cb)` 回调拿到的子上下文（本模块只用到这两项）。
+ *
+ * 刻意**不**复用 `PluginContext`：那里的 `webServer` / `effect` 是可选的，
+ * 而在 `inject(['webServer'], …)` 的回调里它们由 cordis 保证存在。用可选类型
+ * 会逼着处理器写 `?.`，那等于把"注册失败"从抛错悄悄变成静默跳过。
+ */
+export interface HostApiScope {
+  /** 由 `inject(['webServer'], …)` 保证存在。 */
+  webServer: WebServerService
+  /** 注册释放函数；cordis 在插件卸载时调用它。 */
+  effect(fn: () => () => void): unknown
+}
+
+/**
+ * 本模块用到的 cordis 上下文最小接口。
+ *
+ * 只声明实际访问到的成员（不 import 宿主包的完整 `Context`，避免绑死版本）。
+ * `types.ts` 的 `PluginContext` 结构上满足它 —— `index.ts` 的
+ * `createHostApi({ ctx })` 就是拿 `PluginContext` 调进来的，由类型检查保证。
+ */
+export interface HostApiContext {
+  credentials?: CredentialProvider | undefined
+  connection?: ConnectionService | undefined
+  get?(name: string): unknown
+  /** `ctx.logger('env-manager')`；任何一级缺失都必须能安全跳过。 */
+  logger?(name: string): Logger | undefined
+  /** 延迟激活；见 `register()` 的说明。 */
+  inject?(deps: string[], callback: (scope: HostApiScope) => void): unknown
+}
+
+/** 本模块用到的 OS 环境层最小接口（只读面）。真实实现见 `./registry`。 */
+export interface OsReadLayerPort {
+  readonly supported: boolean
+  readAll(): Promise<OsScopeReads>
+}
+
+/** 请求策略闸门，与 `createRequestGuard()` 的返回形状一致。 */
+export type RequestGuard = (req: IncomingRequest, res: ServerResponse) => boolean
+
+/** `createHostApi()` 的依赖。 */
+export interface HostApiOptions {
+  /** cordis 上下文。 */
+  ctx: HostApiContext
+  /** OS 环境层适配器；默认用真实 `reg.exe`。 */
+  osLayer?: OsReadLayerPort
+  /** 覆盖闸门（测试注入用）。 */
+  guard?: RequestGuard
+  /** 覆盖 `ctx.connection`（测试注入用）。 */
+  connection?: ConnectionService | undefined
+}
+
+/** 宿主 API：三个读处理器 + 两个注册函数。 */
+export interface HostApi {
+  /** GET /api/env-manager/state —— 复合模型视图。 */
+  state(req: IncomingRequest, res: ServerResponse): Promise<void>
+  /** GET /api/env-manager/credential-state —— 密钥状态（只报"是否已配置"）。 */
+  credentialState(req: IncomingRequest, res: ServerResponse): Promise<void>
+  /** GET /api/env-manager/health —— 轻量探活。 */
+  health(req: IncomingRequest, res: ServerResponse): void
+  /** 注册读路由。 */
+  register(): unknown
+  /** 注册写路由。 */
+  registerWriteRoutes(writeRoutes: WriteRouteHandlers): unknown
+}
+
+/**
  * 构造宿主 API 处理器集合。
  *
  * @param options - 依赖。
@@ -165,7 +338,7 @@ export function projectState(model, options = {}) {
  * @param options.osLayer - OS 环境层适配器；默认用真实 `reg.exe`。
  * @returns 路由处理器与注册函数。
  */
-export function createHostApi(options) {
+export function createHostApi(options: HostApiOptions): HostApi {
   const { ctx } = options
   const osLayer = options.osLayer ?? new OsEnvironmentLayer({ run: runReg })
 
@@ -175,7 +348,7 @@ export function createHostApi(options) {
     options.guard ?? createRequestGuard({ connection: options.connection ?? ctx.connection })
 
   /** 从查询串取工作目录；未指定则用进程 cwd。 */
-  const cwdOf = (req) => {
+  const cwdOf = (req: IncomingRequest): string => {
     try {
       const url = new URL(req.url ?? '/', 'http://localhost')
       return url.searchParams.get('cwd') ?? process.cwd()
@@ -185,7 +358,7 @@ export function createHostApi(options) {
   }
 
   /** 只接受 GET/HEAD；其余明确回 405，而不是让处理器假装成功。 */
-  const requireGet = (req, res) => {
+  const requireGet = (req: IncomingRequest, res: ServerResponse): boolean => {
     if (req.method === 'GET' || req.method === 'HEAD') return true
     res.writeHead(405, { allow: 'GET, HEAD' })
     res.end()
@@ -206,7 +379,7 @@ export function createHostApi(options) {
 
         const model = buildEnvironmentModel({ cwd: cwdOf(req) })
 
-        let osStatus
+        let osStatus: OsStatus
         if (includeOs) {
           const osLayers = await osLayer.readAll()
           model.variables = mergeOsLayers(model, osLayers)
@@ -228,7 +401,7 @@ export function createHostApi(options) {
         // 自己捕获：webserver 会把抛出的异常变成一个**空的** 400，UI 就失去了原因
         writeJson(res, 500, {
           error: 'state-failed',
-          message: String(error?.message ?? error),
+          message: errorText(error),
         })
       }
     },
@@ -262,7 +435,7 @@ export function createHostApi(options) {
 
         writeJson(res, 200, { available: true, refs: await access.describeMany(refs) })
       } catch (error) {
-        writeJson(res, 500, { error: 'credential-state-failed', message: String(error?.message ?? error) })
+        writeJson(res, 500, { error: 'credential-state-failed', message: errorText(error) })
       }
     },
 
@@ -381,7 +554,7 @@ export function createHostApi(options) {
  * @param status - HTTP 状态码。
  * @param body - 可序列化对象。
  */
-function writeJson(res, status, body) {
+function writeJson(res: ServerResponse, status: number, body: unknown): void {
   const text = JSON.stringify(body)
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
@@ -389,4 +562,20 @@ function writeJson(res, status, body) {
     'content-length': Buffer.byteLength(text, 'utf8'),
   })
   res.end(text)
+}
+
+/**
+ * 从 `unknown` 里安全取出 `message`，取不到就把原值整体字符串化。
+ *
+ * catch 变量在 strict 下是 `unknown`，直接读 `.message` 过不了类型检查。
+ * 这里按**形状**取值而不是 `instanceof Error` —— 宿主与子进程抛出的未必是
+ * `Error` 实例，断言的范围也只有这一个属性；结果与原来的
+ * `String(error?.message ?? error)` 完全一致（对 null/undefined 与基本类型同样安全）。
+ *
+ * @param error - 任意抛出的值。
+ * @returns 诊断文本。
+ */
+function errorText(error: unknown): string {
+  const message = (error as { message?: unknown } | null | undefined)?.message
+  return String(message ?? error)
 }

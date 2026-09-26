@@ -80,14 +80,16 @@ console.log('\n=== 2. 包解析 ===')
 }
 
 console.log('\n=== 3. 宿主半边可加载性 ===')
+// 迁移已完成：这里只列**实际会被加载**的产物。旧的手写 `lib/*.mjs` 已删除，
+// 留着它们的路径只会让这一节永远红着（或在删文件后静默少检几项）。
 const HOST_MODULES = [
   'lib/index.js',
-  'lib/env-model.mjs',
-  'lib/env-write.mjs',
-  'lib/credentials.mjs',
-  'lib/registry.mjs',
-  'lib/host-api.mjs',
-  'lib/write-routes.mjs',
+  'lib/env-model.js',
+  'lib/env-write.js',
+  'lib/credentials.js',
+  'lib/registry.js',
+  'lib/host-api.js',
+  'lib/write-routes.js',
 ]
 const loaded = {}
 for (const rel of HOST_MODULES) {

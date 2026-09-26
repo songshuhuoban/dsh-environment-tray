@@ -23,9 +23,9 @@ import {
   STATE_ROUTE,
   HEALTH_ROUTE,
   CREDENTIAL_STATE_ROUTE,
-} from './lib/host-api.mjs'
-import { buildEnvironmentModel } from './lib/env-model.mjs'
-import { OsEnvironmentLayer, USER_SCOPE, MACHINE_SCOPE, parseRegQuery, decodeRegOutput } from './lib/registry.mjs'
+} from './lib/host-api.js'
+import { buildEnvironmentModel } from './lib/env-model.js'
+import { OsEnvironmentLayer, USER_SCOPE, MACHINE_SCOPE, parseRegQuery, decodeRegOutput } from './lib/registry.js'
 
 let failures = 0
 const ok = (label, condition, detail = '') => {

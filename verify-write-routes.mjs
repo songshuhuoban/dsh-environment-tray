@@ -26,11 +26,11 @@ import {
   ENV_ROUTE,
   CREDENTIAL_ROUTE,
   REGISTRY_ROUTE,
-} from './lib/write-routes.mjs'
-import { EnvEditRejected, readDotEnvFile } from './lib/env-write.mjs'
-import { CredentialAccess, CredentialShadowed, CredentialRejected } from './lib/credentials.mjs'
-import { USER_SCOPE, MACHINE_SCOPE } from './lib/registry.mjs'
-import { parseDotEnv } from './lib/env-model.mjs'
+} from './lib/write-routes.js'
+import { EnvEditRejected, readDotEnvFile } from './lib/env-write.js'
+import { CredentialAccess, CredentialShadowed, CredentialRejected } from './lib/credentials.js'
+import { USER_SCOPE, MACHINE_SCOPE } from './lib/registry.js'
+import { parseDotEnv } from './lib/env-model.js'
 
 let failures = 0
 const ok = (label, condition, detail = '') => {

@@ -15,8 +15,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'nod
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
-import { applyEnvEdits, readDotEnvFile } from './lib/env-write.mjs'
-import { parseDotEnv } from './lib/env-model.mjs'
+import { applyEnvEdits, readDotEnvFile } from './lib/env-write.js'
+import { parseDotEnv } from './lib/env-model.js'
 
 const scratch = mkdtempSync(join(tmpdir(), 'dsh-race-'))
 const dir = join(scratch, 'p')

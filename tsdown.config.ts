@@ -19,7 +19,15 @@ import { clientBundleWrapper } from './build/client-wrapper.mjs'
 export default defineConfig([
   {
     name: 'host',
-    entry: { index: 'src/index.ts' },
+    entry: {
+      index: 'src/index.ts',
+      'env-model': 'src/env-model.ts',
+      'env-write': 'src/env-write.ts',
+      credentials: 'src/credentials.ts',
+      registry: 'src/registry.ts',
+      'host-api': 'src/host-api.ts',
+      'write-routes': 'src/write-routes.ts',
+    },
     outDir: 'lib',
     format: 'esm',
     platform: 'node',
@@ -30,7 +38,18 @@ export default defineConfig([
     //   resolveJsOutputExtension(module, 'es', fixedExtension) → fixedExtension ? 'mjs' : 'js'
     fixedExtension: false,
     dts: false,
-    clean: true,
+    /**
+     * **`clean` 必须是 false。**
+     *
+     * 迁移期间 `lib/` 里同时存在旧的手写 `*.mjs`（已通过 877 项断言）与新的
+     * `*.js` 构建产物，`verify-build-parity.mjs` 要逐一对比两者。
+     * 开 `clean: true` 会删掉旧产物，等价性门禁就无从对比了。
+     *
+     * 而且这个项目已经因此出过一次事故：早先在实现还位于 `lib/` 时就开了
+     * `clean: true`，构建把 `lib/index.js` 与 `lib/client.js` 直接清空，
+     * 而当时没有 git，只能从会话日志重建。
+     */
+    clean: false,
     sourcemap: false,
   },
   {

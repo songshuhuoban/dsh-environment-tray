@@ -27,7 +27,7 @@ import {
   HOME_LAYER_PROXY_NAMES,
   SENSITIVE_ENV_PATTERN,
   BLOCKED_REASON_TEXT,
-} from './lib/env-model.mjs'
+} from './lib/env-model.js'
 
 let failures = 0
 const ok = (label, condition, detail = '') => {

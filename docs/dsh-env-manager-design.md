@@ -2230,6 +2230,127 @@ cannot get property "slots" without inject
 
 ---
 
+## 31. P19 进展：TypeScript 迁移与"等价"的可证性（2026-09-27）
+
+### 31.1 为什么要迁，以及为什么不能"顺手重写"
+
+原来的实现是 8 个手写 `.mjs` + 一个手写 CJS 工厂 bundle，877 项断言全绿。迁到
+TypeScript 的唯一正当理由是**把已经写在注释里的契约变成编译器能检查的东西** ——
+凡是"顺手改好一点"的地方，都会让"新实现是否等价"变成不可判定命题。
+
+所以迁移被拆成两步，中间加一道门禁：
+
+1. `src/*.ts` 逐文件搬过去，**先不改任何行为**；
+2. `verify-build-parity.mjs` 逐模块对比 `lib/*.mjs`（旧）与 `lib/*.js`（新构建）：
+   导出集合、函数元数（arity）、以及每模块约 50 个行为采样；
+3. 只有等价通过之后，才允许把验证套件的 import 从 `.mjs` 指向 `.js`
+   （`repoint-to-build.mjs` 那个一次性脚本，改了 12 个文件 23 处说明符）；
+4. 最后才删除旧实现。
+
+**顺序不能换。** 先改指向再验证，等于把 1046 项断言的"被测对象"悄悄换掉 ——
+套件仍然全绿，但它已经不再测你以为什么都没变的那份代码。
+
+### 31.2 客户端半边：为什么需要一个迷你渲染器
+
+宿主半边可以用单元断言覆盖，客户端半边不行：它是一个 React 组件，行为分布在
+渲染、hooks 依赖、事件处理器和 `fetch` 序列里。而迁移必然让正文逐行变化，
+**文本 diff 没有意义**；"人眼看着一样"更不是证据。
+
+`verify-client-parity.mjs` 的做法是：把旧 bundle（`src/client.legacy.js`，迁移时
+冻结的参照物）和新构建的 `lib/client.js` **都真的跑起来**，在同一套受控环境里
+（假 `window.__ModuleLoader__` + 假 `require('react')` + 假 `fetch` + 只实现
+`createElement/useState/useEffect/useCallback` 的迷你渲染器）走同一串交互，
+逐步比对渲染树快照与 fetch 序列。
+
+脚本按**按钮标签**驱动（`{ click: '保存' }` 而不是"点第 3 个"），所以它自己就
+说明了覆盖了哪条分支。5 种响应模式 × 11 个脚本 = 50 次驱动、169 项断言，实际
+走到了：
+
+| 分支 | 证据（legacy 侧观察到的请求） |
+|---|---|
+| `.env` 写入（CAS） | `POST /env/read` → `POST /env {expectedRevision, edits:[{op:'set'}]}` |
+| `.env` 删除 | `POST /env/read` → `POST /env {edits:[{op:'unset'}]}` |
+| 注册表写入（保类型） | `POST /registry {scope:'os-machine', value:'C:\\tools', type:'REG_SZ'}` |
+| 注册表删除 + 撤销 | `POST /registry {unset:true}` → `POST /registry {value:'C:\\old-tools', type:'REG_EXPAND_SZ'}` |
+| 无备份的删除 | `POST /registry {unset:true}` → 界面只说"无法撤销"，不给按钮 |
+| 凭据写入 / 删除 | `POST /credentials {ref, value}` / `{ref, unset:true}` |
+| 被拒（409 + problems） | 问题文案逐条落到界面上 |
+| `GET /state` 500 | 错误分支 + 「重试」按钮 |
+| 永不 resolve | 「正在读取环境…」分支 |
+
+### 31.3 这道门禁自己出过的三个错（都已修，记下来免得重犯）
+
+**(a) 跨轮次的异步泄漏伪装成真差异。** 第一版报"新 bundle 多发了一次
+`GET /api/env-manager/state`"。加一行调用栈抓取就定位了：那一帧属于
+`src/client.legacy.js` —— 上一轮驱动里还没跑完的 promise 链，在下一轮驱动
+开始时才调到 `fetch`，而 `globalThis.fetch` 那时已经换成新轮的 mock 了。
+修法是每轮驱动一个令牌，非本轮的调用**不记录**并返回永不 resolve 的 promise，
+同时计数（末次运行：迟到调用 0）。
+
+> 教训：门禁报差异时，先问"这个调用是谁发的"，而不是"被测代码哪里改了"。
+> 一行 `new Error().stack` 比几十行 hook 轨迹有用得多。
+
+**(b) 把"处理到一半"当成终态快照。** 点「保存」后立刻取快照，拿到的是
+`busy=true` 的树（按钮写着"保存中…"），于是"撤销删除"按钮还没出现。
+根因是 `settle` 用固定次数的微任务让异步收尾，不够。改成
+`setImmediate` 循环（Node 在两个宏任务之间会把微任务队列彻底清空，纯 promise
+链一轮就跑完），并且**只有在"渲染后无事可做、且放行一轮异步后仍无状态变化"
+时才返回**。
+
+**(c) hooks 状态跨驱动泄漏。** 迷你渲染器的 hook store 最初是全局的，于是
+第二轮驱动里 `useEffect(…, [load])` 因为依赖没变而不重跑，fetch 序列与第一轮
+不同 —— 那是探针噪音。每轮驱动前清空 store（等价于"重新挂载页签"）。
+
+### 31.4 类型化过程中发现的两个真实缺陷（**只报告，未修**）
+
+修它们会改变行为，而这一步的纪律是"等价"，所以留作独立的修复项：
+
+1. **`{op:'set'}` 不带 `value` 会写入字面量 `"undefined"`。**
+   `applyEnvEdits` 校验时用 `edit.value ?? ''`，写入时用
+   `serializeDotEnvLine(edit.name, edit.value)`，`undefined` 被 `String()` 成
+   `"undefined"`。已在 `lib` 与 `src` 两侧复现：
+   `NO_VALUE="undefined"`。HTTP 可达：`POST /api/env-manager/env` 带
+   `{layer, edits:[{op:'set', name:'FOO'}]}`。
+2. **"空值"那条提醒文案是死的。** `representabilityOf('K=""')` 返回
+   `{reason:'空值…', lossy:false}`，而 `validateEdit` 只在 `issue.lossy === true`
+   时记问题 —— 于是 `{op:'set', value:''}` 静默通过，写入 `X=""`，
+   而凭据域把空值当作未设置。
+
+### 31.5 迁移后的形态
+
+| 项 | 迁移前 | 迁移后 |
+|---|---|---|
+| 实现位置 | `lib/*.mjs`（手写，8 文件） | `src/*.ts`（`tsc --strict` 0 错误） |
+| 构建 | 无 | `tsdown`（宿主 7 入口 + 客户端 1 入口） |
+| 客户端 bundle | 手写 CJS 工厂 | `src/client.ts` + `build/client-wrapper.mjs` 构建期包装 |
+| 断言 | 877 | **1046**（新增客户端等价 169 项） |
+| 断言对象 | `lib/*.mjs` | `lib/*.js`（构建产物） |
+
+`tsdown` 的两个坑记在 `tsdown.config.ts` 的注释里：`platform: 'node'` 会把
+`fixedExtension` 默认为 `true`（ESM 产物叫 `.mjs`，与 `main` 不符），必须显式
+关掉；`clean` 必须是 `false` —— 这个项目**已经因此出过一次事故**：实现还位于
+`lib/` 时开了 `clean: true`，构建把 `lib/index.js` 与 `lib/client.js` 直接清空，
+而当时没有 git。
+
+> 这条事故的教训比"别忘了关 clean"更一般：**构建产物的目录不能同时是源码目录。**
+> 迁移期间两者必须共存，所以 `clean: false` 是那段时期的必要条件，不是偏好。
+
+同时删掉了 `dedupe-blocks.mjs` —— 它在那次事故的抢修中被用来"去掉重复块"，
+实际删掉了一段合法代码（把 import 块与正文误判成重复）。留着一个会删代码的
+脚本比没有脚本更危险。`recover-from-session.mjs` / `rebuild-from-session.mjs` /
+`list-edits.mjs` 保留：它们记录的是"从 `session.v3.jsonl.zstd` 里重放 `write`/`edit`
+工具调用以重建文件"这套方法（本次抢修重放了 11 次 `write` + 89 次 `edit`，5 处
+重放失败靠手工补齐）。它们指向的 `lib/*.mjs` 已不存在，是迁移前的考古工具。
+
+### 31.6 客户端半边为什么留一份"旧实现"
+
+`src/client.legacy.js`（31 KB，迁移时冻结的手写 bundle）**不删**。
+`verify-client-parity.mjs` 每次运行都要拿它当参照物 —— 有它，"新构建与旧行为一致"
+才是一个每次都能重跑的结论，而不是"当时看过觉得一样"。它在 `tsconfig.json`
+里被 exclude（是 `.js`，`allowJs` 关着），不会被类型检查或构建碰到。
+
+---
+
 ## 附录：事实来源
 
 - 本机 DSH 安装：`C:\Users\qq651\AppData\Local\npm-cache\_npx\1e7f6d9597241db0\node_modules\@deepseek-ai\`（240 个包，v0.1.5-rc.3）

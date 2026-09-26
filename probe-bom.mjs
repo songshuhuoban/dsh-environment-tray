@@ -13,8 +13,8 @@
  */
 
 import { parseEnv } from 'node:util'
-import { parseDotEnv } from './lib/env-model.mjs'
-import { splitDotEnv, joinDotEnv } from './lib/env-write.mjs'
+import { parseDotEnv } from './lib/env-model.js'
+import { splitDotEnv, joinDotEnv } from './lib/env-write.js'
 
 const BOM = '\uFEFF'
 const withBom = `${BOM}FIRST="one"\nSECOND="two"\n`

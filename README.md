@@ -26,36 +26,48 @@ dsh web
 
 ## 代码结构
 
-| 文件 | 职责 | 关键约束 |
+源码在 `src/`（TypeScript），`lib/` 是 `tsdown` 的构建产物 —— **改 `lib/` 是改不动的，下次构建会覆盖**。
+
+| 源文件 → 产物 | 职责 | 关键约束 |
 |---|---|---|
-| `lib/index.js` | 宿主插件入口 | `inject: ['shellEnv','credentials','connection']`；**apply 绝不抛错**（挂进用户运行中的进程）|
-| `lib/env-model.mjs` | 复合环境模型（UI 的唯一数据源）| `.env` 解析对齐 `node:util.parseEnv`；禁止名单与 DSH 源码逐条一致 |
-| `lib/env-write.mjs` | `.env` 写入 | 逐字节保留未触及的行；CAS + 按路径临界区；原子写 + 0600 |
-| `lib/credentials.mjs` | 密钥域适配 | **只调 `describe`，从不调 `resolve`**；遮蔽翻译成可行动文案 |
-| `lib/registry.mjs` | Windows 注册表 OS 层 | 保留 `REG_EXPAND_SZ`；删除前备份原值以支持撤销；非 Windows 诚实拒绝 |
-| `lib/host-api.mjs` | 读路由 + 客户端数据投影 | 长值摘要化；**敏感名只回长度**；错误结构化 |
-| `lib/write-routes.mjs` | 写路由 + 请求策略闸门 | **路径由层标识推导，不接受任意路径**；复用 `connection.requestRejection` |
-| `lib/client.js` | 客户端页签 | 手写惰性 CJS 工厂（`window.__ModuleLoader__.load`），**不需要打包器** |
+| `src/index.ts` → `lib/index.js` | 宿主插件入口 | `inject: ['shellEnv','credentials','connection']`；**apply 绝不抛错**（挂进用户运行中的进程）|
+| `src/env-model.ts` → `lib/env-model.js` | 复合环境模型（UI 的唯一数据源）| `.env` 解析对齐 `node:util.parseEnv`；禁止名单与 DSH 源码逐条一致 |
+| `src/env-write.ts` → `lib/env-write.js` | `.env` 写入 | 逐字节保留未触及的行；CAS + 按路径临界区；原子写 + 0600 |
+| `src/credentials.ts` → `lib/credentials.js` | 密钥域适配 | **只调 `describe`，从不调 `resolve`**；遮蔽翻译成可行动文案 |
+| `src/registry.ts` → `lib/registry.js` | Windows 注册表 OS 层 | 保留 `REG_EXPAND_SZ`；删除前备份原值以支持撤销；非 Windows 诚实拒绝 |
+| `src/host-api.ts` → `lib/host-api.js` | 读路由 + 客户端数据投影 | 长值摘要化；**敏感名只回长度**；错误结构化 |
+| `src/write-routes.ts` → `lib/write-routes.js` | 写路由 + 请求策略闸门 | **路径由层标识推导，不接受任意路径**；复用 `connection.requestRejection` |
+| `src/client.ts` → `lib/client.js` | 客户端页签 | 普通 ESM 源码；`build/client-wrapper.mjs` 在构建后把它包成惰性 CJS 工厂（`window.__ModuleLoader__.load`），**产物里只允许 `require("react")`** |
 
 ---
 
 ## 验证
 
-### 测试套件（8 个可运行文件，843 项断言）
+### 测试套件（10 个可运行文件，1046 项断言）
 
 ```powershell
-node check-p0.mjs                 # 插件形态 + 客户端 bundle（26）
+pnpm run build                    # 套件测的是 lib/*.js，所以先构建
+node check-p0.mjs                 # 插件形态 + 客户端 bundle（36）
 node verify-env-model.mjs         # 复合模型、差分测试、禁止名单保真（192）
 node verify-env-write.mjs         # 结构保留、CAS、并发、BOM（109）
 node verify-credentials.mjs       # 密钥零泄露与遮蔽分类（52）
 node verify-host-api.mjs          # 读路由、投影、reg.exe 执行器（97）
 node verify-registry.mjs          # 注册表解析、类型保留、并入模型（82）
+node verify-registry-roundtrip.mjs # 真写 HKCU 再清理的往返（24）
 node verify-write-routes.mjs      # 写路由、路径白名单、请求闸门（93）
 node audit-hostile-input.mjs      # 敌意输入审计：畸形请求不崩、不泄露（192）
+node verify-client-parity.mjs     # 客户端半边运行时等价：真渲染 + 真点按钮（169）
 
+node verify-build-parity.mjs      # 迁移期门禁：旧 lib/*.mjs 与新构建的逐模块等价（已退役）
 node audit-coverage.mjs           # 导出符号覆盖审计（应为 53/53）
 node audit-readme.mjs             # 校验本 README 的断言数与实测一致
 ```
+
+`verify-client-parity.mjs` 值得单独说明：它把旧的手写 bundle（`src/client.legacy.js`，
+迁移时冻结的参照物）和新构建的 `lib/client.js` **都真的跑起来** —— 迷你渲染器 + 假
+`fetch`，把两个 bundle 各驱动 25 遍（5 种响应模式 × 若干交互脚本），逐步比对渲染树
+快照与 fetch 序列。脚本按**按钮标签**驱动，覆盖了 `.env` 写/删、注册表写/删/撤销/无备份、
+凭据写/删、被拒分支、错误分支与"正在读取…"分支。它不是文本 diff，"看着一样"不算数。
 
 ### 重启前预检
 
@@ -94,9 +106,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\post-restart-probe.ps1
 
 剩下唯一需要人眼的事：打开 **Settings → Plugins**，确认出现「环境变量」页签。
 
-另有 `verify-registry-roundtrip.mjs`（24 项）**刻意不在上面的列表里** ——
-它会真的写 `HKCU\Environment` 做 写→删→撤销 往返（`finally` 无条件清理）。
-想跑就单独跑：
+另外 `verify-registry-roundtrip.mjs`（24 项）**会真的改系统** —— 它往
+`HKCU\Environment` 写一个自建变量名做 写→删→撤销 往返（`finally` 无条件清理）。
+它现在也在上面的列表里，但如果你不想让测试碰真实注册表，就单独跑：
 
 ```powershell
 node verify-registry-roundtrip.mjs

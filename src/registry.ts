@@ -23,6 +23,82 @@
  * @module dsh-env-manager/registry
  */
 
+import type { CompositeVariable, EnvironmentModel } from './types'
+
+/** `reg.exe query` 输出里解析出的一条值。 */
+export interface RegistryValue {
+  /** 变量名；`(Default)` 已归一为空串。 */
+  name: string
+  /** 注册表原始类型（`REG_SZ` / `REG_EXPAND_SZ` …）；白名单外的类型已被丢弃。 */
+  type: string
+  /** 原始数据文本；`%VAR%` 引用**不会**被展开。 */
+  value: string
+}
+
+/** 一次作用域读取的结果。 */
+export interface RegistryScopeRead {
+  /** 被读取的作用域（原样回传，便于调用方对号入座）。 */
+  scope: string
+  /** 解析出的值；失败时为空数组。 */
+  entries: RegistryValue[]
+  /** 失败原因（平台不支持 / 作用域未知 / `reg.exe` 报错）；成功时不出现。 */
+  error?: string
+}
+
+/** `reg.exe` 执行器：把 stdout 作为**原始字节**返回（同步或异步都可）。 */
+export type RegistryRunner = (args: string[]) => Uint8Array | Promise<Uint8Array>
+
+/** `OsEnvironmentLayer` 的依赖。 */
+export interface OsEnvironmentLayerOptions {
+  /** 执行 `reg.exe` 并把 stdout 作为 Buffer 返回。 */
+  run?: RegistryRunner
+  /** 平台标识；默认 `process.platform`。 */
+  platform?: string
+}
+
+/** `write()` 的结果。 */
+export interface RegistryWriteResult {
+  ok: boolean
+  /** 实际写入的类型（未知类型已降级为 `REG_SZ`）。 */
+  type?: string
+  error?: string
+}
+
+/** 被删除的原值 —— 删除注册表值没有回收站，这是撤销的唯一依据。 */
+export interface RegistryRemovedValue {
+  name: string
+  value: string
+  type: string
+}
+
+/** `remove()` 的结果。 */
+export interface RegistryRemoveResult {
+  ok: boolean
+  /** 被删掉的原值与类型，供 UI 撤销。 */
+  removed?: RegistryRemovedValue
+  /** 读不到原值时如实报告"没有备份"。 */
+  backupUnavailable?: boolean
+  error?: string
+}
+
+/**
+ * `readOne()` 的结果。
+ *
+ * 写成可辨识联合是刻意的：`found` 为 true 时**一定有**完整原值，调用方
+ * （`remove()` 的备份路径）据此收窄，不需要任何断言。
+ */
+export type RegistryOneRead =
+  | { found: true; name: string; value: string; type: string }
+  | { found: false; error?: string }
+
+/** `mergePath()` 的结果。 */
+export interface PathMerge {
+  /** 合并后的 PATH 文本（**系统段在前**）。 */
+  combined: string
+  /** 参与合并的层，按拼接顺序。 */
+  order: string[]
+}
+
 /** 用户级作用域：优先级更高。 */
 export const USER_SCOPE = 'os-user'
 
@@ -30,10 +106,17 @@ export const USER_SCOPE = 'os-user'
 export const MACHINE_SCOPE = 'os-machine'
 
 /** 注册表路径。 */
-const KEYS = {
+const KEYS: Readonly<Partial<Record<string, string>>> = {
   [USER_SCOPE]: 'HKCU\\Environment',
   [MACHINE_SCOPE]: 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment',
 }
+
+/**
+ * `readAll()` 的结果：两个作用域各一份。
+ *
+ * 键直接取自上面两个作用域常量，避免调用方再手写一遍字符串字面量。
+ */
+export type OsScopeReads = Record<typeof USER_SCOPE | typeof MACHINE_SCOPE, RegistryScopeRead>
 
 /** `reg.exe` 报告的类型 → 我们的规范化类型。 */
 const VALUE_TYPES = new Set([
@@ -58,7 +141,7 @@ const VALUE_TYPES = new Set([
  * @param buffer - 原始字节。
  * @returns 解码后的文本。
  */
-export function decodeRegOutput(buffer) {
+export function decodeRegOutput(buffer: Uint8Array): string {
   return new TextDecoder('utf-8', { fatal: false }).decode(buffer)
 }
 
@@ -72,7 +155,7 @@ export function decodeRegOutput(buffer) {
  * @param path - 键路径或输出里的键头。
  * @returns 统一为全名 + 大写的形式。
  */
-export function normalizeKeyPath(path) {
+export function normalizeKeyPath(path: string): string {
   return String(path)
     .trim()
     .replace(/^HKCU\\/i, 'HKEY_CURRENT_USER\\')
@@ -96,8 +179,8 @@ export function normalizeKeyPath(path) {
  * @param keyPath - 被查询的键路径（可用缩写根），用于区分本键与其子键。
  * @returns `{ name, type, value }` 数组。
  */
-export function parseRegQuery(text, keyPath) {
-  const out = []
+export function parseRegQuery(text: string, keyPath: string): RegistryValue[] {
+  const out: RegistryValue[] = []
   const lines = text.split(/\r?\n/)
   const wantKey = normalizeKeyPath(keyPath)
   let inScope = false
@@ -137,12 +220,18 @@ export function parseRegQuery(text, keyPath) {
  * OS 环境层的读取/写入端口。抽象成类以便测试注入假执行器。
  */
 export class OsEnvironmentLayer {
+  /** 执行 `reg.exe`；未注入（或平台不支持）时为 undefined。 */
+  readonly run: RegistryRunner | undefined
+
+  /** 平台标识；`supported` 的依据之一。 */
+  readonly platform: string
+
   /**
    * @param options - 依赖。
    * @param options.run - 执行 `reg.exe` 并把 stdout 作为 Buffer 返回。
    * @param options.platform - 平台标识；默认 `process.platform`。
    */
-  constructor(options = {}) {
+  constructor(options: OsEnvironmentLayerOptions = {}) {
     this.run = options.run
     this.platform = options.platform ?? process.platform
   }
@@ -157,7 +246,7 @@ export class OsEnvironmentLayer {
    *
    * @returns 支持时为 true。
    */
-  get supported() {
+  get supported(): boolean {
     return this.platform === 'win32' && typeof this.run === 'function'
   }
 
@@ -167,8 +256,11 @@ export class OsEnvironmentLayer {
    * @param scope - `os-user` 或 `os-machine`。
    * @returns `{ scope, entries, error }`；失败时 `entries` 为空并带 `error`。
    */
-  async read(scope) {
-    if (!this.supported) {
+  async read(scope: string): Promise<RegistryScopeRead> {
+    // `supported` 已经蕴含"`run` 存在"（见 getter），并列判断一次只是为了
+    // 让 TS 把它收窄成函数类型：属性访问不会跨 getter 收窄。语义完全一致。
+    const run = this.run
+    if (!this.supported || run === undefined) {
       return { scope, entries: [], error: 'unsupported-platform' }
     }
     const keyPath = KEYS[scope]
@@ -176,12 +268,12 @@ export class OsEnvironmentLayer {
       return { scope, entries: [], error: 'unknown-scope' }
     }
 
-    let stdout
+    let stdout: Uint8Array
     try {
-      stdout = await this.run(['query', keyPath])
+      stdout = await run(['query', keyPath])
     } catch (error) {
       // 最常见的失败是权限（读 HKLM 一般可以，写才需要提权）
-      return { scope, entries: [], error: String(error?.message ?? error) }
+      return { scope, entries: [], error: errorText(error) }
     }
 
     return { scope, entries: parseRegQuery(decodeRegOutput(stdout), keyPath) }
@@ -192,7 +284,7 @@ export class OsEnvironmentLayer {
    *
    * @returns `{ 'os-user': [...], 'os-machine': [...] }`。
    */
-  async readAll() {
+  async readAll(): Promise<OsScopeReads> {
     const [user, machine] = await Promise.all([this.read(USER_SCOPE), this.read(MACHINE_SCOPE)])
     return { [USER_SCOPE]: user, [MACHINE_SCOPE]: machine }
   }
@@ -209,8 +301,10 @@ export class OsEnvironmentLayer {
    * @param type - 原有类型；省略则按 `REG_SZ` 处理。
    * @returns 写入结果。
    */
-  async write(scope, name, value, type = 'REG_SZ') {
-    if (!this.supported) return { ok: false, error: 'unsupported-platform' }
+  async write(scope: string, name: string, value: string, type = 'REG_SZ'): Promise<RegistryWriteResult> {
+    // 同 `read()`：并列判断只为把 `run` 收窄成函数类型。
+    const run = this.run
+    if (!this.supported || run === undefined) return { ok: false, error: 'unsupported-platform' }
     const keyPath = KEYS[scope]
     if (keyPath === undefined) return { ok: false, error: 'unknown-scope' }
 
@@ -218,10 +312,10 @@ export class OsEnvironmentLayer {
     // DWORD/QWORD 需要 /t 与十进制数据；其余按字符串
     const args = ['add', keyPath, '/v', name, '/t', effectiveType, '/d', String(value), '/f']
     try {
-      await this.run(args)
+      await run(args)
       return { ok: true, type: effectiveType }
     } catch (error) {
-      return { ok: false, error: String(error?.message ?? error) }
+      return { ok: false, error: errorText(error) }
     }
   }
 
@@ -235,7 +329,7 @@ export class OsEnvironmentLayer {
    * @param name - 变量名。
    * @returns `{ found, value?, type? }`。
    */
-  async readOne(scope, name) {
+  async readOne(scope: string, name: string): Promise<RegistryOneRead> {
     const all = await this.read(scope)
     if (all.error !== undefined) return { found: false, error: all.error }
     // Windows 注册表名不区分大小写
@@ -255,17 +349,21 @@ export class OsEnvironmentLayer {
    * @param name - 变量名。
    * @returns `{ ok, removed? }`；`removed` 含 `{ name, value, type }`。
    */
-  async remove(scope, name) {
-    if (!this.supported) return { ok: false, error: 'unsupported-platform' }
+  async remove(scope: string, name: string): Promise<RegistryRemoveResult> {
+    // 同 `read()`：并列判断只为把 `run` 收窄成函数类型。
+    const run = this.run
+    if (!this.supported || run === undefined) return { ok: false, error: 'unsupported-platform' }
     const keyPath = KEYS[scope]
     if (keyPath === undefined) return { ok: false, error: 'unknown-scope' }
 
     // 先取原值：取不到也继续删（可能是权限只允许写不允许读的极端情况），
     // 但要把"没有备份"这个事实如实报出去
-    const backup = await this.readOne(scope, name).catch(() => ({ found: false }))
+    // 备份读取失败 ⇒ 按"没找到"处理（与原来的 `.catch(() => ({ found: false }))` 同义；
+    // 返回类型标注是为了让 TS 保住 `found` 的字面量判别，否则读不到 name/value/type）
+    const backup = await this.readOne(scope, name).catch((): RegistryOneRead => ({ found: false }))
 
     try {
-      await this.run(['delete', keyPath, '/v', name, '/f'])
+      await run(['delete', keyPath, '/v', name, '/f'])
       return {
         ok: true,
         ...backup.found === true
@@ -273,7 +371,7 @@ export class OsEnvironmentLayer {
           : { removed: undefined, backupUnavailable: true },
       }
     } catch (error) {
-      return { ok: false, error: String(error?.message ?? error) }
+      return { ok: false, error: errorText(error) }
     }
   }
 
@@ -288,12 +386,16 @@ export class OsEnvironmentLayer {
    * @param machinePath - 系统级 PATH。
    * @returns 合并前后的视图。
    */
-  static mergePath(userPath, machinePath) {
+  static mergePath(userPath?: string, machinePath?: string): PathMerge {
     const hasUser = typeof userPath === 'string' && userPath.length > 0
     const hasMachine = typeof machinePath === 'string' && machinePath.length > 0
     if (!hasUser && !hasMachine) return { combined: '', order: [] }
-    if (!hasUser) return { combined: machinePath, order: ['os-machine'] }
-    if (!hasMachine) return { combined: userPath, order: ['os-user'] }
+    // 走到下面两行时对应的 `has*` 必为 true（两个都空的情况上面已经返回），
+    // 所以 `?? ''` 不会被取到。加它只是因为 TS 无法把别名条件
+    // （`const hasMachine = typeof machinePath === 'string' && …`）的收窄结论
+    // 带进这两个分支 —— 不加就通不过类型检查。
+    if (!hasUser) return { combined: machinePath ?? '', order: ['os-machine'] }
+    if (!hasMachine) return { combined: userPath ?? '', order: ['os-user'] }
     return { combined: `${machinePath};${userPath}`, order: ['os-machine', 'os-user'] }
   }
 }
@@ -309,18 +411,18 @@ export class OsEnvironmentLayer {
  * @param osLayers - `readAll()` 的结果。
  * @returns 新的变量数组（不修改入参）。
  */
-export function mergeOsLayers(model, osLayers) {
-  const byName = new Map()
+export function mergeOsLayers(model: EnvironmentModel, osLayers: Partial<OsScopeReads>): CompositeVariable[] {
+  const byName = new Map<string, CompositeVariable>()
   for (const variable of model.variables) {
     byName.set(variable.name, { ...variable, layers: [...variable.layers] })
   }
 
   /** Windows 上名字大小写不敏感。 */
-  const fold = (name) => (process.platform === 'win32' ? name.toUpperCase() : name)
-  const folded = new Map()
+  const fold = (name: string): string => (process.platform === 'win32' ? name.toUpperCase() : name)
+  const folded = new Map<string, CompositeVariable>()
   for (const [name, entry] of byName) folded.set(fold(name), entry)
 
-  const addLayer = (scope, entries) => {
+  const addLayer = (scope: string, entries: readonly RegistryValue[] | undefined): void => {
     for (const raw of entries ?? []) {
       if (raw.name.length === 0) continue
       const key = fold(raw.name)
@@ -356,7 +458,7 @@ export function mergeOsLayers(model, osLayers) {
 
   // 重算生效层与遮蔽标记（顺序与 SOURCE_ORDER 一致：process 最高）
   const order = ['process', 'project-env', 'user-env', USER_SCOPE, MACHINE_SCOPE]
-  const variables = []
+  const variables: CompositeVariable[] = []
   for (const entry of byName.values()) {
     entry.layers.sort((a, b) => order.indexOf(a.layer) - order.indexOf(b.layer))
     entry.effective = entry.layers[0]?.layer
@@ -367,4 +469,20 @@ export function mergeOsLayers(model, osLayers) {
 
   variables.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
   return variables
+}
+
+/**
+ * 从 `unknown` 里安全取出 `message`，取不到就把原值整体字符串化。
+ *
+ * catch 变量在 strict 下是 `unknown`，直接读 `.message` 过不了类型检查。
+ * 这里按**形状**取值而不是 `instanceof Error` —— 宿主与子进程抛出的未必是
+ * `Error` 实例，断言的范围也只有这一个属性；结果与原来的
+ * `String(error?.message ?? error)` 完全一致（对 null/undefined 与基本类型同样安全）。
+ *
+ * @param error - 任意抛出的值。
+ * @returns 诊断文本。
+ */
+function errorText(error: unknown): string {
+  const message = (error as { message?: unknown } | null | undefined)?.message
+  return String(message ?? error)
 }

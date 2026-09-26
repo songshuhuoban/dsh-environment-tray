@@ -20,8 +20,8 @@ import {
   describeSource,
   isPossibleRef,
   toCredentialView,
-} from './lib/credentials.mjs'
-import { validateEdit } from './lib/env-write.mjs'
+} from './lib/credentials.js'
+import { validateEdit } from './lib/env-write.js'
 
 let failures = 0
 const ok = (label, condition, detail = '') => {

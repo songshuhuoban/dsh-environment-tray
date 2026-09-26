@@ -24,8 +24,8 @@ import {
   validateEdit,
   checkPermissions,
   EnvEditRejected,
-} from './lib/env-write.mjs'
-import { parseDotEnv } from './lib/env-model.mjs'
+} from './lib/env-write.js'
+import { parseDotEnv } from './lib/env-model.js'
 
 let failures = 0
 const ok = (label, condition, detail = '') => {

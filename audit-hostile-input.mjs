@@ -14,8 +14,8 @@ import { mkdtempSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
-import { createHostApi, STATE_ROUTE, HEALTH_ROUTE, CREDENTIAL_STATE_ROUTE } from './lib/host-api.mjs'
-import { createWriteRoutes, ENV_ROUTE, CREDENTIAL_ROUTE, REGISTRY_ROUTE } from './lib/write-routes.mjs'
+import { createHostApi, STATE_ROUTE, HEALTH_ROUTE, CREDENTIAL_STATE_ROUTE } from './lib/host-api.js'
+import { createWriteRoutes, ENV_ROUTE, CREDENTIAL_ROUTE, REGISTRY_ROUTE } from './lib/write-routes.js'
 
 /**
  * 是否泄露了堆栈帧。

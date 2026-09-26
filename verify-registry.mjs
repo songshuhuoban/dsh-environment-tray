@@ -21,7 +21,7 @@ import {
   decodeRegOutput,
   normalizeKeyPath,
   mergeOsLayers,
-} from './lib/registry.mjs'
+} from './lib/registry.js'
 import { execFileSync } from 'node:child_process'
 
 let failures = 0

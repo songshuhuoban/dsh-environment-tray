@@ -19,10 +19,22 @@
 
 import { resolve } from 'node:path'
 
-import { applyEnvEdits, EnvEditRejected, readDotEnvFile } from './env-write.mjs'
-import { resolveDshHome } from './env-model.mjs'
-import { CredentialAccess, CredentialRejected, CredentialShadowed } from './credentials.mjs'
-import { USER_SCOPE, MACHINE_SCOPE } from './registry.mjs'
+import { applyEnvEdits, EnvEditRejected, readDotEnvFile } from './env-write'
+import { resolveDshHome } from './env-model'
+import { CredentialAccess, CredentialRejected, CredentialShadowed } from './credentials'
+import { USER_SCOPE, MACHINE_SCOPE } from './registry'
+import type {
+  ConnectionService,
+  CredentialInfo,
+  CredentialProvider,
+  CredentialView,
+  EnvEdit,
+  EnvEditProblem,
+  IncomingRequest,
+  RouteHandler,
+  ServerResponse,
+  WebServerService,
+} from './types'
 
 /** 请求体上限。环境变量的值不该有几百 KB。 */
 const MAX_BODY_BYTES = 256 * 1024
@@ -59,7 +71,10 @@ export const REGISTRY_ROUTE = '/api/env-manager/registry'
  * @param options.connection - `ctx.connection` 服务；缺失时**失败关闭**。
  * @returns 一个 `(req, res) => boolean` 闸门：返回 true 表示可以继续。
  */
-export function createRequestGuard(options) {
+export function createRequestGuard(options: {
+  /** `ctx.connection`；缺失时闸门**失败关闭**。 */
+  connection?: ConnectionService | undefined
+}): (req: IncomingRequest, res: ServerResponse) => boolean {
   const { connection } = options
 
   return (req, res) => {
@@ -99,8 +114,10 @@ export function createRequestGuard(options) {
  * @returns 解析后的对象。
  * @throws 当 body 过大或不是合法 JSON 时。
  */
-export async function readJsonBody(req) {
-  const chunks = []
+export async function readJsonBody(req: IncomingRequest): Promise<Record<string, unknown>> {
+  // 用 `Uint8Array` 而不是 `Buffer`：`IncomingRequest` 的迭代元素是 `Uint8Array`，
+  // 而 `Buffer.concat` 接受 `Uint8Array[]`（Buffer 是其子类）。
+  const chunks: Uint8Array[] = []
   let total = 0
   for await (const chunk of req) {
     total += chunk.length
@@ -114,7 +131,7 @@ export async function readJsonBody(req) {
   try {
     return JSON.parse(text)
   } catch (error) {
-    throw new Error(`请求体不是合法 JSON：${String(error?.message ?? error)}`)
+    throw new Error(`请求体不是合法 JSON：${String((error as { message?: string } | undefined)?.message ?? error)}`)
   }
 }
 
@@ -131,8 +148,13 @@ export async function readJsonBody(req) {
  * @returns `.env` 的绝对路径。
  * @throws 层非法或声明路径与推导结果不一致时。
  */
-export function resolveLayerPath(layer, cwd, home, claimed) {
-  let derived
+export function resolveLayerPath(
+  layer: unknown,
+  cwd: string,
+  home: string,
+  claimed?: unknown,
+): string {
+  let derived: string
   if (layer === 'project-env') {
     derived = resolve(cwd, '.env')
   } else if (layer === 'user-env') {
@@ -157,13 +179,20 @@ export function resolveLayerPath(layer, cwd, home, claimed) {
 
 /** 写操作被拒绝。 */
 export class WriteRejected extends Error {
+  /** 机器可读原因。 */
+  readonly code: string
+  /** 结构化问题列表（禁止名单、有损值等），供 UI 逐条展示。 */
+  readonly problems: EnvEditProblem[]
+  /** 建议的 HTTP 状态码。 */
+  readonly status: number
+
   /**
    * @param code - 机器可读原因。
    * @param message - 人类可读说明。
    * @param problems - 结构化问题列表。
    * @param status - 建议的 HTTP 状态码。
    */
-  constructor(code, message, problems = [], status = 400) {
+  constructor(code: string, message: string, problems: EnvEditProblem[] = [], status = 400) {
     super(message)
     this.name = 'WriteRejected'
     this.code = code
@@ -178,20 +207,57 @@ export class WriteRejected extends Error {
  * @param error - 原始异常。
  * @returns 规范化后的拒绝对象。
  */
-export function toWriteRejected(error) {
+export function toWriteRejected(error: unknown): WriteRejected {
   if (error instanceof WriteRejected) return error
   if (error instanceof EnvEditRejected) {
     // CAS 冲突是 409（可重试），校验失败是 400
-    const status = error.code === 'stale-revision' ? 409 : 400
-    return new WriteRejected(error.code, error.message, error.problems, status)
+    const rejected = error as EnvEditRejected & { code: string; problems?: EnvEditProblem[] }
+    const status = rejected.code === 'stale-revision' ? 409 : 400
+    return new WriteRejected(rejected.code, rejected.message, rejected.problems ?? [], status)
   }
   if (error instanceof CredentialShadowed) {
-    return new WriteRejected(error.code, error.message, [], 409)
+    return new WriteRejected('credential-shadowed', error.message, [], 409)
   }
   if (error instanceof CredentialRejected) {
-    return new WriteRejected(error.code, error.message, [], 400)
+    const rejected = error as CredentialRejected & { code?: string }
+    return new WriteRejected(rejected.code ?? 'credential-rejected', error.message, [], 400)
   }
-  return new WriteRejected('write-failed', String(error?.message ?? error), [], 500)
+  const message = (error as { message?: string } | undefined)?.message
+  return new WriteRejected('write-failed', String(message ?? error), [], 500)
+}
+
+/** 本模块用到的 OS 环境层最小接口（真实实现见 `./registry`）。 */
+export interface OsLayerPort {
+  readonly supported: boolean
+  write(scope: string, name: string, value: string, type?: string): Promise<{ ok: boolean; type?: string; error?: string }>
+  remove(scope: string, name: string): Promise<{ ok: boolean; removed?: { name: string; value: string; type: string }; backupUnavailable?: boolean; error?: string }>
+}
+
+/** `createWriteRoutes` 的依赖。 */
+export interface WriteRoutesOptions {
+  /** cordis 上下文（只用到 credentials / connection）。 */
+  ctx: {
+    credentials?: CredentialProvider | undefined
+    connection?: ConnectionService | undefined
+  }
+  /** OS 层适配器。 */
+  osLayer: OsLayerPort
+  /** 覆盖闸门（测试注入用）。 */
+  guard?: (req: IncomingRequest, res: ServerResponse) => boolean
+  /** 覆盖凭据适配器工厂（测试注入用）。 */
+  credentialAccessOf?: () => CredentialAccess | undefined
+  /** 覆盖 home 解析（测试注入用）。 */
+  homeOf?: () => string
+  /** 覆盖 connection（测试注入用）。 */
+  connection?: ConnectionService | undefined
+}
+
+/** 四个写处理器的集合。 */
+export interface WriteRouteHandlers {
+  env: RouteHandler
+  envRead: RouteHandler
+  credentials: RouteHandler
+  registry: RouteHandler
 }
 
 /**
@@ -204,10 +270,10 @@ export function toWriteRejected(error) {
  * @param options.homeOf - DSH home 解析器；便于测试注入。
  * @returns 三个处理器。
  */
-export function createWriteRoutes(options) {
+export function createWriteRoutes(options: WriteRoutesOptions): WriteRouteHandlers {
   const { ctx, osLayer } = options
   const homeOf = options.homeOf ?? (() => resolveDshHome())
-  const credentialAccessOfFn =
+  const credentialAccessOfFn: () => CredentialAccess | undefined =
     options.credentialAccessOf ??
     (() => {
       const provider = ctx.credentials
@@ -219,7 +285,7 @@ export function createWriteRoutes(options) {
     options.guard ?? createRequestGuard({ connection: options.connection ?? ctx.connection })
 
   /** 只接受 POST。 */
-  const requirePost = (req, res) => {
+  const requirePost = (req: IncomingRequest, res: ServerResponse): boolean => {
     if (req.method === 'POST') return true
     res.writeHead(405, { allow: 'POST' })
     res.end()
@@ -238,7 +304,7 @@ export function createWriteRoutes(options) {
    * @param fn - 产生响应体的异步工作。
    * @returns 写出完成后的 promise。
    */
-  const respond = (res, fn) =>
+  const respond = (res: ServerResponse, fn: () => Promise<Record<string, unknown>>): Promise<void> =>
     Promise.resolve()
       .then(fn)
       .then((result) => writeJson(res, 200, { ok: true, ...result }))
@@ -252,7 +318,7 @@ export function createWriteRoutes(options) {
         })
       })
 
-  const cwdOf = (req) => {
+  const cwdOf = (req: IncomingRequest): string => {
     try {
       return new URL(req.url ?? '/', 'http://localhost').searchParams.get('cwd') ?? process.cwd()
     } catch {
@@ -273,11 +339,23 @@ export function createWriteRoutes(options) {
       const cwd = cwdOf(req)
       await respond(res, async () => {
         const body = await readJsonBody(req)
+        // `readJsonBody` 的返回是 `Record<string, unknown>`（请求体不可信），
+        // 所以这里逐项校验而不是强转。校验通过后 `resolveLayerPath` 还会再验一次
+        // 层标识本身（那里才是权威的层白名单）。
+        if (typeof body.layer !== 'string') {
+          throw new WriteRejected('invalid-layer', 'layer 必须是字符串', [], 400)
+        }
+        if (!Array.isArray(body.edits)) {
+          throw new WriteRejected('invalid-edits', 'edits 必须是数组', [], 400)
+        }
+        if (body.expectedRevision !== undefined && typeof body.expectedRevision !== 'string') {
+          throw new WriteRejected('invalid-revision', 'expectedRevision 必须是字符串', [], 400)
+        }
         const path = resolveLayerPath(body.layer, cwd, homeOf(), body.path)
         const after = await applyEnvEdits({
           path,
           layer: body.layer,
-          edits: body.edits,
+          edits: body.edits as EnvEdit[],
           expectedRevision: body.expectedRevision,
         })
         // 只回结构与新 revision，不回全部值（values 可能含敏感项）
@@ -327,10 +405,19 @@ export function createWriteRoutes(options) {
           throw new WriteRejected('credentials-unavailable', '本 composition 未挂载凭据域，无法管理密钥', [], 501)
         }
         const body = await readJsonBody(req)
-        if (body.unset === true) {
-          return { ref: body.ref, view: await access.unset(body.ref) }
+        // 与 `env` 处理器同样的理由：请求体不可信，逐项校验后再交给凭据域。
+        // 引用名必须是字符串；`value` 允许 `undefined`（表示清空），但给了就必须是字符串。
+        if (typeof body.ref !== 'string' || body.ref.length === 0) {
+          throw new WriteRejected('invalid-ref', 'ref 必须是非空字符串', [], 400)
         }
-        return { ref: body.ref, view: await access.set(body.ref, body.value) }
+        if (body.value !== undefined && typeof body.value !== 'string') {
+          throw new WriteRejected('invalid-value', 'value 必须是字符串', [], 400)
+        }
+        const ref = body.ref
+        if (body.unset === true) {
+          return { ref, view: await access.unset(ref) }
+        }
+        return { ref, view: await access.set(ref, body.value as string | undefined) }
       })
     },
 
@@ -361,6 +448,17 @@ export function createWriteRoutes(options) {
         if (typeof body.name !== 'string' || body.name.length === 0) {
           throw new WriteRejected('invalid-name', '变量名不能为空', [], 400)
         }
+        // 值必须是字符串。非字符串（数字/对象/数组）一律拒绝，而不是强转 ——
+        // 静默 `String(x)` 会让 `{a:1}` 变成 "[object Object]" 写进注册表。
+        if (body.value !== undefined && typeof body.value !== 'string') {
+          throw new WriteRejected('invalid-value', 'value 必须是字符串', [], 400)
+        }
+        const value = typeof body.value === 'string' ? body.value : ''
+        // 类型也必须显式是字符串；未知类型交由 OsEnvironmentLayer 降级为 REG_SZ。
+        if (body.type !== undefined && typeof body.type !== 'string') {
+          throw new WriteRejected('invalid-type', 'type 必须是字符串', [], 400)
+        }
+        const type = typeof body.type === 'string' ? body.type : undefined
 
         if (body.unset === true) {
           const removed = await osLayer.remove(scope, body.name)
@@ -378,7 +476,7 @@ export function createWriteRoutes(options) {
           }
         }
 
-        const wrote = await osLayer.write(scope, body.name, body.value ?? '', body.type)
+        const wrote = await osLayer.write(scope, body.name, value, type)
         if (!wrote.ok) throw new WriteRejected('registry-failed', String(wrote.error), [], 500)
         return {
           scope,
@@ -399,7 +497,7 @@ export function createWriteRoutes(options) {
  * @param status - HTTP 状态码。
  * @param body - 可序列化对象。
  */
-function writeJson(res, status, body) {
+function writeJson(res: ServerResponse, status: number, body: unknown): void {
   const text = JSON.stringify(body)
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',

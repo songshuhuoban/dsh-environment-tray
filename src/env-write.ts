@@ -29,11 +29,27 @@ import {
   representabilityOf,
   isBootstrapOnly,
   HOME_LAYER_PROXY_NAMES,
-} from './env-model.mjs'
+} from './env-model'
+import type { EnvEdit, EnvEditProblem } from './types'
 
 /** rename 在 Windows 上可能因文件被短暂占用而失败，按此上限重试。 */
 const RENAME_RETRY_LIMIT = 10
 const RENAME_RETRY_DELAY_MS = 40
+
+/**
+ * 判断异常是否带指定的 `errno` 码（`ENOENT` / `EPERM` / `EACCES` / `EBUSY`）。
+ *
+ * `catch` 拿到的是 `unknown`（`useUnknownInCatchVariables`），这里用 `in` 收窄
+ * 而不是断言：只有真的带 `code` 字段的对象才会命中，语义与原来的
+ * `error?.code === '...'` 完全一致 —— 不是对象、没有该字段时都返回 false。
+ *
+ * @param error - `catch` 捕获到的值。
+ * @param code - 期望的 errno 码。
+ * @returns 命中时为 true。
+ */
+function isErrnoCode(error: unknown, code: string): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === code
+}
 
 /**
  * 计算内容 revision。用于 CAS：只有 revision 相同才允许写入。
@@ -45,11 +61,45 @@ const RENAME_RETRY_DELAY_MS = 40
  * @param text - 文件全文；文件不存在时为 undefined。
  * @returns revision 字符串；文件不存在时返回 `'absent'`。
  */
-export function revisionOf(path, text) {
+export function revisionOf(path: string, text: string | undefined): string {
   if (text === undefined) return 'absent'
   const hash = createHash('sha256').update(text, 'utf8').digest('hex').slice(0, 16)
   return `sha256:${hash}:${Buffer.byteLength(text, 'utf8')}`
 }
+
+/** 空行 / 注释 / 无法解析的行：逐字节保留，不参与编辑。 */
+export interface VerbatimSegment {
+  kind: 'blank' | 'comment' | 'other'
+  /** 含行尾的原文。 */
+  raw: string
+  /** 不含行尾的文本。 */
+  content: string
+}
+
+/** 有效赋值行：唯一会被改写的片段种类，带解析出的键与值。 */
+export interface EntrySegment {
+  kind: 'entry'
+  /** 含行尾的原文。 */
+  raw: string
+  /** 不含行尾的文本。 */
+  content: string
+  /** 该行声明的变量名（保留文件里的原有拼写）。 */
+  key: string
+  /** 该行解析出的值；解析不出时为 undefined。 */
+  value: string | undefined
+}
+
+/** `.env` 的一个片段：`raw` 含行尾，所以重写时未触及的行逐字节不变。 */
+export type DotEnvSegment = VerbatimSegment | EntrySegment
+
+/** `unset` 的删除占位：只在 `applyEditsToSegments` 内部存在，返回前被摘掉。 */
+interface RemovedSegment {
+  kind: 'removed'
+  raw: null
+}
+
+/** 编辑过程中的位置槽：片段 + 删除占位。 */
+type SegmentSlot = DotEnvSegment | RemovedSegment
 
 /**
  * 把 `.env` 拆成可保留原貌的片段序列。
@@ -64,8 +114,8 @@ export function revisionOf(path, text) {
  * @param text - 文件全文。
  * @returns 片段数组。每个片段带 `raw`（含行尾）与 `content`（不含行尾）。
  */
-export function splitDotEnv(text) {
-  const segments = []
+export function splitDotEnv(text: string): DotEnvSegment[] {
+  const segments: DotEnvSegment[] = []
   let start = 0
 
   // 手写扫描，不用正则：`g` 标志下带空分支的模式在零宽匹配时 lastIndex
@@ -101,7 +151,7 @@ export function splitDotEnv(text) {
  * @param raw - 含行尾的原文。
  * @returns 片段对象。
  */
-function classifySegment(content, raw) {
+function classifySegment(content: string, raw: string): DotEnvSegment {
   const trimmed = content.trim()
   if (trimmed.length === 0) return { kind: 'blank', raw, content }
   if (trimmed.startsWith('#')) return { kind: 'comment', raw, content }
@@ -129,7 +179,7 @@ function classifySegment(content, raw) {
  * @param segments - 片段数组。
  * @returns 文件全文。
  */
-export function joinDotEnv(segments) {
+export function joinDotEnv(segments: readonly DotEnvSegment[]): string {
   return segments.map((s) => s.raw).join('')
 }
 
@@ -140,9 +190,13 @@ export function joinDotEnv(segments) {
  * @param layer - 目标层（`project-env` 或 `user-env`）。
  * @param value - 待写入的值。
  * @returns 问题列表；空数组表示允许。
+ *
+ * @remarks
+ * `layer` 声明成 `unknown`：它来自 HTTP 请求体，而本函数只把它与 `user-env`
+ * 做相等比较 —— 不相等就拿不到代理例外（失败关闭），所以非字符串是安全的。
  */
-export function validateEdit(name, layer, value) {
-  const problems = []
+export function validateEdit(name: string, layer: unknown, value: string): EnvEditProblem[] {
+  const problems: EnvEditProblem[] = []
 
   if (typeof name !== 'string' || name.trim().length === 0) {
     problems.push({ code: 'empty-name', message: '变量名不能为空' })
@@ -186,18 +240,32 @@ export function validateEdit(name, layer, value) {
   return problems
 }
 
+/** `readDotEnvFile()` 的结果；文件不存在时 `exists` 为 false、`revision` 为 `'absent'`。 */
+export interface DotEnvFileRead {
+  /** 文件绝对路径。 */
+  path: string
+  /** 文件是否存在。 */
+  exists: boolean
+  /** 内容 revision（CAS 用）。 */
+  revision: string
+  /** 解析出的键值对。 */
+  values: Record<string, string>
+  /** 可保留原貌的片段序列。 */
+  segments: DotEnvSegment[]
+}
+
 /**
  * 读取一个 `.env` 文件，附带 revision 与结构信息。
  *
  * @param path - 文件绝对路径。
  * @returns 读取结果；文件不存在时 `exists` 为 false 且 `revision` 为 `'absent'`。
  */
-export async function readDotEnvFile(path) {
+export async function readDotEnvFile(path: string): Promise<DotEnvFileRead> {
   let text
   try {
     text = await readFile(path, 'utf8')
   } catch (error) {
-    if (error?.code === 'ENOENT') {
+    if (isErrnoCode(error, 'ENOENT')) {
       return { path, exists: false, revision: 'absent', values: {}, segments: [] }
     }
     throw error
@@ -227,7 +295,7 @@ export async function readDotEnvFile(path) {
  * @param name - 变量名。
  * @returns 用于比较的键。
  */
-function editKey(name) {
+function editKey(name: string): string {
   return process.platform === 'win32' ? name.toUpperCase() : name
 }
 
@@ -241,11 +309,11 @@ function editKey(name) {
  * @param edits - 编辑列表。
  * @returns 新片段数组。
  */
-function applyEditsToSegments(segments, edits) {
+function applyEditsToSegments(segments: readonly DotEnvSegment[], edits: readonly EnvEdit[]): DotEnvSegment[] {
   /** 沿用文件已有的行尾风格；全新文件用 \n。 */
   const eol = segments.find((s) => s.raw.endsWith('\r\n'))?.raw.slice(-2) ?? '\n'
 
-  const next = segments.map((s) => ({ ...s }))
+  const next: SegmentSlot[] = segments.map((s) => ({ ...s }))
   // 以折叠后的键索引待办编辑；同一批里的重复编辑后者覆盖前者
   const pending = new Map(edits.map((e) => [editKey(e.name), e]))
 
@@ -271,7 +339,7 @@ function applyEditsToSegments(segments, edits) {
     next.push({ kind: 'entry', raw: content + eol, content, key: edit.name, value: edit.value })
   }
 
-  return next.filter((s) => s.kind !== 'removed')
+  return next.filter((s): s is DotEnvSegment => s.kind !== 'removed')
 }
 
 /**
@@ -283,14 +351,14 @@ function applyEditsToSegments(segments, edits) {
  * @param text - 全文。
  * @param mode - POSIX 权限位；Windows 上忽略。
  */
-async function atomicWrite(path, text, mode) {
+async function atomicWrite(path: string, text: string, mode: number): Promise<void> {
   const dir = dirname(path)
   await mkdir(dir, { recursive: true })
   const temp = resolve(dir, `.${randomUUID()}.tmp`)
 
   try {
     await writeFile(temp, text, { encoding: 'utf8', mode })
-    let lastError
+    let lastError: unknown
     for (let attempt = 0; attempt < RENAME_RETRY_LIMIT; attempt += 1) {
       try {
         await rename(temp, path)
@@ -298,7 +366,7 @@ async function atomicWrite(path, text, mode) {
       } catch (error) {
         lastError = error
         // Windows 上目标可能被短暂占用（杀软、编辑器、另一个读取者）
-        if (error?.code !== 'EPERM' && error?.code !== 'EACCES' && error?.code !== 'EBUSY') throw error
+        if (!isErrnoCode(error, 'EPERM') && !isErrnoCode(error, 'EACCES') && !isErrnoCode(error, 'EBUSY')) throw error
         await new Promise((r) => setTimeout(r, RENAME_RETRY_DELAY_MS))
       }
     }
@@ -323,7 +391,7 @@ async function atomicWrite(path, text, mode) {
  * 修法是把整个「读 → 校验 → 写」放进按路径的临界区。用 Promise 链实现，
  * 无需锁原语：每个新操作排在前一个之后。
  */
-const writeChains = new Map()
+const writeChains = new Map<string, Promise<void>>()
 
 /**
  * 在一个路径的临界区里运行一个操作。
@@ -332,7 +400,7 @@ const writeChains = new Map()
  * @param task - 要运行的异步任务。
  * @returns 任务的结果。
  */
-function withPathLock(path, task) {
+function withPathLock<T>(path: string, task: () => Promise<T>): Promise<T> {
   const key = resolve(path)
   const previous = writeChains.get(key) ?? Promise.resolve()
   // 无论前一个操作成功还是失败，下一个都要能继续
@@ -350,17 +418,45 @@ function withPathLock(path, task) {
 
 /** 编辑被拒绝时抛出的错误，带结构化问题列表供 UI 呈现。 */
 export class EnvEditRejected extends Error {
+  /** 机器可读的拒绝原因。 */
+  readonly code: string
+  /** 结构化问题列表。 */
+  readonly problems: EnvEditProblem[]
+
   /**
    * @param code - 机器可读的拒绝原因。
    * @param message - 人类可读说明。
    * @param problems - 结构化问题列表。
    */
-  constructor(code, message, problems = []) {
+  constructor(code: string, message: string, problems: EnvEditProblem[] = []) {
     super(message)
     this.name = 'EnvEditRejected'
     this.code = code
     this.problems = problems
   }
+}
+
+/** `applyEnvEdits()` 的编辑请求。 */
+export interface ApplyEnvEditsOptions {
+  /** 目标 `.env` 绝对路径（由宿主推导，绝不来自请求体）。 */
+  path: string
+  /**
+   * 层标识（`project-env` 或 `user-env`），决定禁止名单例外。
+   *
+   * 声明成 `unknown`：它来自 HTTP 请求体，旧实现只把它用于相等比较 ——
+   * 不等于 `user-env` 就拿不到代理例外（失败关闭），所以非字符串是安全的。
+   */
+  layer: unknown
+  /**
+   * `[{ op: 'set'|'unset', name, value? }]`。
+   *
+   * 声明成 `unknown`：同样来自请求体，旧实现的收口判定就是 `Array.isArray`
+   * 加逐条的 `validateEdit`（非法名字得到 `empty-name`）。断言只在本文件内
+   * 一处发生，不新增任何拒绝条件。
+   */
+  edits: unknown
+  /** 客户端读到的 revision；不匹配即拒绝（同样来自请求体，只参与相等比较）。 */
+  expectedRevision?: unknown
 }
 
 /**
@@ -380,17 +476,21 @@ export class EnvEditRejected extends Error {
  * @returns 写入后的状态（含新 revision 与解析出的值）。
  * @throws {EnvEditRejected} 校验失败或 revision 不匹配。
  */
-export async function applyEnvEdits(options) {
+export async function applyEnvEdits(options: ApplyEnvEditsOptions): Promise<DotEnvFileRead> {
   const { path, layer, edits, expectedRevision } = options
 
   if (!Array.isArray(edits) || edits.length === 0) {
     throw new EnvEditRejected('no-edits', '没有需要应用的编辑')
   }
 
+  // `edits` 是请求体里的 `unknown`：形状只按旧实现那样判一次 `Array.isArray`
+  // （上一行），逐条的形状由 `validateEdit` 负责。断言收口在这一处。
+  const list = edits as readonly EnvEdit[]
+
   // 1. 全部校验先跑完，任何一个不合格就整批拒绝。
   //    校验是纯计算、不碰磁盘，放在临界区外可以让"必然失败"的请求不排队。
-  const problems = []
-  for (const edit of edits) {
+  const problems: EnvEditProblem[] = []
+  for (const edit of list) {
     const found = validateEdit(edit.name, layer, edit.value ?? '')
     for (const problem of found) problems.push({ ...problem, name: edit.name })
   }
@@ -409,7 +509,7 @@ export async function applyEnvEdits(options) {
     }
 
     // 3. 生成新内容。插入的新行自带行尾，所以拼接后自然以换行结尾。
-    const segments = applyEditsToSegments(current.segments, edits)
+    const segments = applyEditsToSegments(current.segments, list)
     const text = joinDotEnv(segments)
 
     // 4. 落盘：0600（POSIX）。.env 可能含密钥，新建时绝不留默认权限窗口。
@@ -423,6 +523,18 @@ export async function applyEnvEdits(options) {
   })
 }
 
+/** `checkPermissions()` 的结果；`checked` 为 false 时 `ok`/`mode`/`reason` 无意义。 */
+export interface PermissionCheck {
+  /** 是否真的做了检查（Windows 上没有可检查的 mode 位，为 false）。 */
+  checked: boolean
+  /** 权限是否符合建议（仅 `checked` 为 true 时有意义）。 */
+  ok?: boolean
+  /** 八进制权限文本，如 `0600`。 */
+  mode?: string
+  /** 不符合建议时的原因。 */
+  reason?: string
+}
+
 /**
  * 只读地检查一个 `.env` 文件的权限是否符合建议。
  *
@@ -433,7 +545,7 @@ export async function applyEnvEdits(options) {
  * @param path - 文件路径。
  * @returns 权限检查结果。
  */
-export async function checkPermissions(path) {
+export async function checkPermissions(path: string): Promise<PermissionCheck> {
   try {
     const info = await stat(path)
     if (process.platform === 'win32') {
@@ -447,7 +559,7 @@ export async function checkPermissions(path) {
       reason: (mode & 0o077) === 0 ? undefined : '文件对其他用户可读，建议 chmod 600',
     }
   } catch (error) {
-    if (error?.code === 'ENOENT') return { checked: true, ok: true, mode: undefined, reason: undefined }
+    if (isErrnoCode(error, 'ENOENT')) return { checked: true, ok: true, mode: undefined, reason: undefined }
     throw error
   }
 }

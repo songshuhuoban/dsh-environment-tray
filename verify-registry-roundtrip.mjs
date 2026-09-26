@@ -12,7 +12,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { OsEnvironmentLayer, USER_SCOPE } from './lib/registry.mjs'
+import { OsEnvironmentLayer, USER_SCOPE } from './lib/registry.js'
 
 let failures = 0
 const ok = (label, condition, detail = '') => {

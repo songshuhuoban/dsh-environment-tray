@@ -7,7 +7,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { parseRegQuery, decodeRegOutput } from './lib/registry.mjs'
+import { parseRegQuery, decodeRegOutput } from './lib/registry.js'
 
 const buffer = execFileSync('reg.exe', ['query', 'HKCU\\Environment'], { windowsHide: true })
 const text = decodeRegOutput(buffer)

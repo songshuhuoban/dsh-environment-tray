@@ -23,8 +23,16 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { homedir } from 'node:os'
 
+import type {
+  CompositeVariable,
+  EnvLayerId,
+  EnvLayerValue,
+  EnvParseWarning,
+  EnvironmentModel,
+} from './types'
+
 /** 层的信任顺序，最可信在前。与 `dsh-launch-environment` 的 `SOURCE_ORDER` 一致。 */
-export const SOURCE_ORDER = ['process', 'project-env', 'user-env']
+export const SOURCE_ORDER: readonly EnvLayerId[] = ['process', 'project-env', 'user-env']
 
 /**
  * 任何 `.env` 文件都不得声明的精确名字。
@@ -69,7 +77,7 @@ export const SENSITIVE_ENV_PATTERN = /KEY|PASSWORD|SECRET|TOKEN/i
  * @param name - 变量名。
  * @returns 命中精确名单或前缀禁令时为 true。
  */
-export function isBootstrapOnly(name) {
+export function isBootstrapOnly(name: string): boolean {
   const upper = name.toUpperCase()
   return BOOTSTRAP_NAMES.has(upper) || BOOTSTRAP_PREFIXES.some((prefix) => upper.startsWith(prefix))
 }
@@ -99,7 +107,10 @@ export function isBootstrapOnly(name) {
  * @param warnings - 可选回调，接收 `{ code, message }` 形式的诊断。
  * @returns 解析出的键值对；同名后者覆盖前者。
  */
-export function parseDotEnv(content, warnings) {
+export function parseDotEnv(
+  content: string,
+  warnings?: (warning: EnvParseWarning) => void,
+): Record<string, string> {
   let text = String(content)
   if (text.charCodeAt(0) === 0xfeff) {
     text = text.slice(1)
@@ -113,7 +124,7 @@ export function parseDotEnv(content, warnings) {
     }
   }
 
-  const out = {}
+  const out: Record<string, string> = {}
   const lines = text.split('\n')
 
   for (let index = 0; index < lines.length; index += 1) {
@@ -174,7 +185,7 @@ export function parseDotEnv(content, warnings) {
  * @param quote - 引号字符（`"` 或 `'`）。
  * @returns 收尾引号下标；未闭合时为 -1。
  */
-function closingQuoteIndex(text, quote) {
+function closingQuoteIndex(text: string, quote: string): number {
   return text.indexOf(quote, 1)
 }
 
@@ -188,8 +199,21 @@ function closingQuoteIndex(text, quote) {
  * @param body - 引号内的原文。
  * @returns 还原后的值。
  */
-function unescapeDouble(body) {
+function unescapeDouble(body: string): string {
   return body.replace(/\\n/g, '\n')
+}
+
+/**
+ * 一段序列化结果的可表示性问题。
+ *
+ * 两种问题必须区分开：`lossy: true` 表示写下去再读回来**值就变了**（必须拒绝
+ * 保存），`lossy: false` 表示能读回原值、但与"未设置"无法区分（仅空值）。
+ */
+export interface RepresentabilityIssue {
+  /** 人类可读的原因，UI 直接展示。 */
+  reason: string
+  /** 是否为有损：有损必须拒绝保存。 */
+  lossy: boolean
 }
 
 /**
@@ -198,7 +222,7 @@ function unescapeDouble(body) {
  * 有些值在 `.env` 里**根本无法忠实表示** —— 因为 `parseEnv` 不提供任何
  * 转义机制。UI 必须能拿到这个信息并拒绝保存，而不是静默写坏用户的值。
  */
-const representabilityIssues = new Map()
+const representabilityIssues = new Map<string, RepresentabilityIssue>()
 
 /**
  * 序列化一个键值对为 `.env` 行。
@@ -221,15 +245,20 @@ const representabilityIssues = new Map()
  * @param key - 变量名。
  * @param value - 变量值。
  * @returns 一行可被 `parseDotEnv`/`parseEnv`/`loadEnvFile` 稳定读回的内容。
+ *
+ * @remarks
+ * `value` 如实声明为 `string | undefined`：旧实现把它直接交给 `String()`，
+ * 传 `undefined` 会写出字面量 `"undefined"`。类型只是把既有事实写出来，
+ * 不用断言把它藏起来（调用方本应传字符串 —— 见验收报告里的疑似缺陷）。
  */
-export function serializeDotEnvLine(key, value) {
+export function serializeDotEnvLine(key: string, value: string | undefined): string {
   const text = String(value)
   const hasDouble = text.includes('"')
   const hasSingle = text.includes("'")
   const hasNewline = text.includes('\n')
 
-  let literal
-  let reason
+  let literal: string
+  let reason: string | undefined
 
   if (text.length === 0) {
     reason = '空值：写进 .env 后无法与"未设置"区分，凭据域也把空值视为未设置'
@@ -265,7 +294,7 @@ export function serializeDotEnvLine(key, value) {
  * @param line - `serializeDotEnvLine` 的返回值。
  * @returns `{ reason, lossy }`；可表示时为 undefined。
  */
-export function representabilityOf(line) {
+export function representabilityOf(line: string): RepresentabilityIssue | undefined {
   return representabilityIssues.get(line)
 }
 
@@ -277,10 +306,18 @@ export function representabilityOf(line) {
  * @param env - 用于解析的环境，默认 `process.env`。
  * @returns home 绝对路径。
  */
-export function resolveDshHome(env = process.env) {
+export function resolveDshHome(env: NodeJS.ProcessEnv = process.env): string {
   const configured = env.DSH_HOME
   if (typeof configured === 'string' && configured.trim().length > 0) return resolve(configured)
   return resolve(homedir(), '.dsh')
+}
+
+/** 一个层的 `.env` 读取结果（文件不存在时为 undefined）。 */
+export interface EnvFileRead {
+  /** 文件绝对路径。 */
+  path: string
+  /** 解析出的键值对。 */
+  values: Record<string, string>
 }
 
 /**
@@ -290,7 +327,7 @@ export function resolveDshHome(env = process.env) {
  * @param warnings - 诊断收集数组（会被就地追加）。
  * @returns 文件存在时返回 `{ path, values }`，否则 undefined。读取失败不抛错。
  */
-export function readEnvFile(path, warnings) {
+export function readEnvFile(path: string, warnings?: EnvParseWarning[]): EnvFileRead | undefined {
   let content
   try {
     content = readFileSync(path, 'utf8')
@@ -301,6 +338,14 @@ export function readEnvFile(path, warnings) {
     if (Array.isArray(warnings)) warnings.push({ ...warning, path })
   })
   return { path, values }
+}
+
+/** 一个层对某个名字的可写性判定。 */
+export interface Writability {
+  /** 是否允许写入该层。 */
+  writable: boolean
+  /** 不可写的机器可读原因码；文案见 {@link BLOCKED_REASON_TEXT}。 */
+  blockedCode?: string
 }
 
 /**
@@ -316,7 +361,7 @@ export function readEnvFile(path, warnings) {
  * @param layer - 层标识。
  * @returns `{ writable, blockedCode? }`。
  */
-export function writabilityOf(name, layer) {
+export function writabilityOf(name: string, layer: EnvLayerId | string): Writability {
   if (layer === 'process') {
     return { writable: false, blockedCode: 'process-inherited' }
   }
@@ -340,6 +385,28 @@ export const BLOCKED_REASON_TEXT = {
   'unknown-layer': '未知层',
 }
 
+/** 某一层里命中的取值：值 + 来源文件（`process` 层没有 `path`）。 */
+interface LayerHit {
+  value: string
+  path?: string
+}
+
+/** 归一后的变量条目：原始拼写 + 各层的命中。 */
+interface NameEntry {
+  name: string
+  layers: Partial<Record<EnvLayerId, LayerHit>>
+}
+
+/** `buildEnvironmentModel()` 的输入路径与环境。 */
+export interface EnvironmentModelOptions {
+  /** 项目层目录（`<cwd>/.env`）。 */
+  cwd?: string
+  /** DSH home；省略则走 `resolveDshHome`。 */
+  home?: string
+  /** 作为 `process` 层的环境，默认 `process.env`。 */
+  env?: NodeJS.ProcessEnv
+}
+
 /**
  * 构建复合环境视图：每个名字在每一层的取值、生效层与可写性。
  *
@@ -352,25 +419,25 @@ export const BLOCKED_REASON_TEXT = {
  * @param options.env - 作为 `process` 层的环境，默认 `process.env`。
  * @returns 按名字排序的复合变量数组。
  */
-export function buildEnvironmentModel(options = {}) {
+export function buildEnvironmentModel(options: EnvironmentModelOptions = {}): EnvironmentModel {
   const cwd = resolve(options.cwd ?? process.cwd())
   const home = resolve(options.home ?? resolveDshHome(options.env ?? process.env))
   const processEnv = options.env ?? process.env
 
   /** 解析诊断（当前只有 BOM）：UI 必须能显示它们，不能静默处理。 */
-  const warnings = []
+  const warnings: EnvParseWarning[] = []
 
   const projectFile = readEnvFile(resolve(cwd, '.env'), warnings)
   // 项目目录就是 home 时，DSH 不重复读第二遍（dsh-app-boot 的同款判断）
   const userFile = home === cwd ? undefined : readEnvFile(resolve(home, '.env'), warnings)
 
   /** name -> { layer -> { value, path } }，键按平台规则归一。 */
-  const byName = new Map()
+  const byName = new Map<string, NameEntry>()
 
   /** Windows 上环境名大小写不敏感，这里做同样的折叠。 */
-  const fold = (name) => (process.platform === 'win32' ? name.toUpperCase() : name)
+  const fold = (name: string): string => (process.platform === 'win32' ? name.toUpperCase() : name)
 
-  const record = (layer, path, values) => {
+  const record = (layer: EnvLayerId, path: string | undefined, values: Record<string, string | undefined>): void => {
     for (const [rawName, value] of Object.entries(values)) {
       if (value === undefined) continue
       const key = fold(rawName)
@@ -390,10 +457,10 @@ export function buildEnvironmentModel(options = {}) {
   if (projectFile !== undefined) record('project-env', projectFile.path, projectFile.values)
   if (userFile !== undefined) record('user-env', userFile.path, userFile.values)
 
-  const variables = []
+  const variables: CompositeVariable[] = []
   for (const entry of byName.values()) {
-    const layers = []
-    let effective
+    const layers: EnvLayerValue[] = []
+    let effective: EnvLayerId | undefined
     for (const layer of SOURCE_ORDER) {
       const hit = entry.layers[layer]
       if (hit === undefined) continue
@@ -431,7 +498,7 @@ export function buildEnvironmentModel(options = {}) {
  * @param variable - 复合变量。
  * @returns 单行描述。
  */
-export function describeVariable(variable) {
+export function describeVariable(variable: CompositeVariable): string {
   const marks = []
   if (variable.shadowed) marks.push('被遮蔽')
   if (variable.forbidden) marks.push('禁止写入')
