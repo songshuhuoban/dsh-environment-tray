@@ -1,0 +1,163 @@
+/**
+ * tsdown 插件：把客户端半边的 ESM 产物包装成 DSH 期望的 `__ModuleLoader__` bundle。
+ *
+ * ── 为什么需要这一层 ────────────────────────────────────────────────────────
+ *
+ * `tsdown` 单独产出的是标准 ESM（`import` / `export`），而 DSH 的客户端 bundle
+ * 必须是**惰性 CJS 工厂**。第一方包的 `scripts` 只有 `{"bundle": "tsdown"}`，
+ * 而 240 个包里**没有**独立的客户端打包工具包 —— 说明这个包装器存在于 DSH 仓库
+ * 但未发布。所以这里自己实现。
+ *
+ * ── 两个已由实现证实的约束 ──────────────────────────────────────────────────
+ *
+ * 1. **惰性**：`__ModuleLoader__.load` 只**注册**工厂；工厂体（含 CSS 注入等副作用）
+ *    在首次 materialize 时才跑。所以模块体必须整体搬进工厂闭包。
+ *    （来源：`dsh-client-modules` 的 "Lazy CJS model" 说明与实现。）
+ *
+ * 2. **`require` 而非 `import`**：裸说明符由 runner 的 `require` 解析，解析顺序是
+ *    「平台种子表 → 记忆化记录 → boot graph 行 → 已注册工厂」——**表外的会抛错**。
+ *    所以 `external` 必须精确，非外部的 import 一律**报错**而不是静默内联。
+ *
+ * ── 尚未验证的一点（不要把它当成已知）──────────────────────────────────────
+ *
+ * `evaluateClientHalf` 会检查脚本的**顶层返回值**是否为插件
+ * （`isDynamicCordisPlugin(returned)`）。我没有浏览器，**无法验证**一个
+ * `window.__ModuleLoader__.load({...})` 语句的求值结果能否通过该检查。
+ * 本包装器**照抄第一方产物的形状**（同样是裸的 `load({...})` 语句结尾），
+ * 因此与已验证可用的第一方 bundle 行为一致；这一点属于**形状对齐**，
+ * 不属于我实测过的结论。
+ *
+ * @module dsh-env-manager/tsdown-client-wrapper
+ */
+
+import { readFileSync, writeFileSync } from 'node:fs'
+
+/** 允许保留为 `require()` 的说明符。 */
+const DEFAULT_EXTERNAL = ['react', 'react/jsx-runtime']
+
+/**
+ * 把一段 ESM 源码转成 CJS 工厂体。
+ *
+ * 只处理**构建产物**里实际出现的形态（顶层 `import` 与单个 `export { … }`）。
+ * 遇到不认识的形式**抛错**而不是静默产出坏 bundle —— 这正是此前手写 bundle
+ * 反复出错的根源。
+ *
+ * @param source - tsdown 产出的 ESM 源码。
+ * @param external - 允许 `require()` 的说明符集合。
+ * @param label - 诊断用的文件标识。
+ * @returns 工厂体源码行数组。
+ */
+export function toFactoryBody(source, external, label) {
+  const requires = []
+  const body = []
+  let exportClause = null
+
+  for (const line of source.split('\n')) {
+    let m = /^\s*import\s+['"]([^'"]+)['"];?\s*$/.exec(line)
+    if (m !== null) {
+      if (!external.has(m[1])) throw new Error(`${label}: import "${m[1]}" is not external — it would be inlined into the browser bundle`)
+      requires.push(`require(${JSON.stringify(m[1])})`)
+      continue
+    }
+
+    m = /^\s*import\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"];?\s*$/.exec(line)
+    if (m !== null) {
+      if (!external.has(m[2])) throw new Error(`${label}: import "${m[2]}" is not external`)
+      requires.push(`const {${m[1]}} = require(${JSON.stringify(m[2])})`)
+      continue
+    }
+
+    m = /^\s*import\s*\*\s*as\s+([A-Za-z_$][\w$]*)\s+from\s*['"]([^'"]+)['"];?\s*$/.exec(line)
+    if (m !== null) {
+      if (!external.has(m[2])) throw new Error(`${label}: import "${m[2]}" is not external`)
+      requires.push(`const ${m[1]} = require(${JSON.stringify(m[2])})`)
+      continue
+    }
+
+    m = /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s*['"]([^'"]+)['"];?\s*$/.exec(line)
+    if (m !== null) {
+      if (!external.has(m[2])) throw new Error(`${label}: import "${m[2]}" is not external`)
+      requires.push(`const ${m[1]} = require(${JSON.stringify(m[2])})`)
+      continue
+    }
+
+    m = /^\s*export\s*\{([^}]*)\}\s*;?\s*$/.exec(line)
+    if (m !== null) {
+      if (exportClause !== null) throw new Error(`${label}: multiple \`export {}\` clauses — the wrapper handles exactly one`)
+      exportClause = m[1]
+      continue
+    }
+
+    if (/^\s*export\s/.test(line)) {
+      throw new Error(
+        `${label}: unsupported export form: ${line.trim().slice(0, 90)}\n` +
+          `  The wrapper understands a single trailing \`export { … }\`. ` +
+          `Make the client entry emit no other export form.`,
+      )
+    }
+
+    body.push(line)
+  }
+
+  if (exportClause === null) {
+    throw new Error(`${label}: no \`export { … }\` clause found — the client bundle must export \`apply\` (and \`inject\`)`)
+  }
+
+  const assignments = exportClause
+    .split(',')
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0)
+    .map((part) => {
+      const alias = /^([A-Za-z_$][\w$]*)\s+as\s+([A-Za-z_$][\w$]*)$/.exec(part)
+      if (alias !== null) return `exports.${alias[2]} = ${alias[1]};`
+      if (!/^[A-Za-z_$][\w$]*$/.test(part)) throw new Error(`${label}: cannot parse export member ${JSON.stringify(part)}`)
+      return `exports.${part} = ${part};`
+    })
+
+  return [
+    ...requires,
+    ...body.map((l) => (l.length === 0 ? l : `\t${l}`)),
+    ...assignments.map((l) => `\t${l}`),
+    '\treturn module.exports',
+  ]
+}
+
+/**
+ * tsdown 插件：包装客户端入口产物，形状与第一方 bundle 对齐。
+ *
+ * @param options - 选项。
+ * @param options.id - bundle 的包名（`__ModuleLoader__.load({ id })`）。
+ * @param options.chunk - 要包装的产物文件名（默认 `client.js`）。
+ * @param options.external - 允许 `require()` 的说明符。
+ * @returns tsdown 插件对象。
+ */
+export function clientBundleWrapper(options) {
+  const { id, chunk = 'client.js' } = options
+  const external = new Set(options.external ?? DEFAULT_EXTERNAL)
+
+  return {
+    name: 'dsh-client-bundle-wrapper',
+    writeBundle(outputOptions) {
+      const dir = outputOptions.dir ?? 'lib'
+      const file = `${dir}/${chunk}`
+      const source = readFileSync(file, 'utf8')
+
+      const lines = [
+        '/* Generated by build/client-wrapper.mjs — do not edit by hand. */',
+        'window.__ModuleLoader__.load({',
+        `\tid: ${JSON.stringify(id)},`,
+        '\tfactory: (require) => {',
+        '\t\tconst module = { exports: {} }',
+        '\t\tconst exports = module.exports',
+        "\t\tObject.defineProperty(exports, Symbol.toStringTag, { value: 'Module' })",
+        ...toFactoryBody(source, external, file),
+        '\t}',
+        '})',
+        '',
+      ]
+
+      writeFileSync(file, lines.join('\n'), 'utf8')
+      this.info?.(`wrapped ${file} as client bundle "${id}"`)
+    },
+  }
+}

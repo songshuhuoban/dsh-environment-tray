@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# Build scratch / probes that are not part of the deliverable
+.poc-tsdown/node_modules/
+.probe-home/
+.recovered/
+.rebuilt/
+
+# Local state captured during development — never part of the package
+.backup/
+.probe-marker.txt
+.env
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+*.log
