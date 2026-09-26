@@ -53,8 +53,10 @@ export interface ValueSummary {
  * 传输视图里的一个层。
  *
  * ⚠️ `redacted` 与 `valueSummary` **互斥**，这是安全约束而不是风格问题：
- * 敏感名的层只允许带 `valueLength`，任何能还原出值的字段都不许出现
+ * 默认路径下敏感名的层只允许带 `valueLength`，任何能还原出值的字段都不许出现
  * （见 `projectState()`；verify-host-api.mjs 有 "NO VALUE FIELD" 断言守着）。
+ * 唯一的例外是调用方显式传入 `revealSensitive: true` —— 那时该层走普通分支，
+ * `redacted` 与 `valueSummary` 依然不会同时出现。
  */
 export interface ProjectedLayer {
   layer: EnvLayerId | string
@@ -67,11 +69,14 @@ export interface ProjectedLayer {
   registryType?: string
   /** 写系统级注册表需要提权。 */
   requiresElevation?: true
-  /** 敏感名标记：只有长度，绝无值。 */
+  /** 敏感名标记：值为敏感名且未被显式放开时只有长度，绝无值。 */
   redacted?: true
   /** 值的长度（敏感名与 `reveal=0` 时只有它）。 */
   valueLength?: number
-  /** 值摘要；敏感名**永远**不会有它。 */
+  /**
+   * 值摘要；敏感名**只有**在 `revealSensitive` 显式打开时才会有它
+   * （见 `projectState()` 的信任论证）。
+   */
   valueSummary?: ValueSummary
 }
 
@@ -128,8 +133,21 @@ export interface ProjectedState {
 
 /** `projectState()` 的选项。 */
 export interface ProjectStateOptions {
-  /** 是否包含值。默认 true；敏感名永远不含。 */
+  /**
+   * 是否包含值。默认 true；敏感名另由 {@link ProjectStateOptions.revealSensitive} 决定。
+   */
   revealValues?: boolean
+  /**
+   * 是否**也**给名字看起来敏感的条目发值。默认 **false**（与旧行为逐字节相同）。
+   *
+   * 打开后敏感名走普通条目的处理分支：`revealValues` 为 true 时给 `valueSummary`，
+   * 为 false 时只给 `valueLength` —— 即 "`reveal=0` 绝不携带摘要" 这条不变式
+   * 不受本选项影响。
+   *
+   * 这是一道**用户显式打开**的开关，不是默认放宽：默认路径下敏感名仍然只回长度。
+   * 信任论证见 `projectState()` 里的展开说明。
+   */
+  revealSensitive?: boolean
 }
 
 /**
@@ -190,11 +208,19 @@ export function summarizeValue(value: unknown): ValueSummary {
  *
  * @param model - `buildEnvironmentModel()` 的结果。
  * @param options - 投影选项。
- * @param options.revealValues - 是否包含值。默认 true；敏感名永远不含。
+ * @param options.revealValues - 是否包含值。默认 true。
+ * @param options.revealSensitive - 是否连敏感名的值一起给。默认 false。
  * @returns 可 JSON 序列化的视图。
  */
 export function projectState(model: EnvironmentModel, options: ProjectStateOptions = {}): ProjectedState {
   const revealValues = options.revealValues !== false
+  /**
+   * 严格布尔化：`options.revealSensitive` 的公开类型已是 `boolean`，但宿主
+   * 里同一份选项可能在未类型化的边界被拼出来（见 `/state` 解析 `reveal` 的
+   * 那条注释）。用 `=== true` 而不是真值判断，保证任何非 true 的取值 ——
+   * 包括 `"true"`、`1`、`undefined` —— 都留在默认的遮蔽路径上。
+   */
+  const revealSensitive = options.revealSensitive === true
 
   const variables: ProjectedVariable[] = model.variables.map((variable) => ({
     name: variable.name,
@@ -218,10 +244,36 @@ export function projectState(model: EnvironmentModel, options: ProjectStateOptio
         ...layer.requiresElevation === true ? { requiresElevation: true } : {},
       }
 
-      if (variable.sensitive) {
+      if (variable.sensitive && !revealSensitive) {
+        // 默认路径，**逐字节与从前一致**。
+        //
         // 敏感名**只回长度**。绝不能回摘要 —— 摘要里就是真实值的前 60 字符，
         // 那等于把密钥送到浏览器。（这个漏洞是被 verify-host-api.mjs 抓出来的：
         // 先前版本标了 redacted 却仍附带 valueSummary。）
+        //
+        // ── 放开这条遮蔽的信任论证（`revealSensitive: true`）────────────────
+        //
+        // 前提是**用户在 UI 里显式打开**那个开关；默认 false 就是本分支。
+        //
+        // 打开后，本路由能读到的值，同一个调用方本来就能经本插件自己的写路由
+        // **改写**：`POST /api/env-manager/env` 写 `.env`、
+        // `POST /api/env-manager/credentials` 写凭据库。而所有这些路由都注册在
+        // 同一道闸门后面 —— `connection.requestRejection`（Host/Origin 栅栏
+        // 挡 DNS rebinding 与跨站请求，之后还有浏览器会话认证）。所以
+        // "未通过闸门的调用方读不到" 这一条没有被削弱：闸门是路由级的，
+        // 与是否放开敏感名无关。
+        //
+        // 于是泄露面的增量是零：值在传输前多经过一道"能不能覆盖它"的检查，
+        // 而能覆盖它的人本来就能把它设成任意值。换句话说，
+        // **"已认证的本地 UI 可以读回一个它已经能覆盖的值"** 就是本插件既有的
+        // 威胁模型；这里只是把这条既有事实延伸到读回。
+        //
+        // 唯一刻意留成不透明的是**凭据域**：它不是"不愿意给"，而是物理上没有
+        // 可给的东西 —— `EnvLayerValue` 里的 `credential` 层根本不存在（见
+        // `SOURCE_ORDER` 只含 process/project-env/user-env），
+        // `CredentialProvider` 刻意不声明 `resolve`，`CredentialInfo` 与
+        // `CredentialView` 也都没有可以搭载值的字段。所以 `reveal=all`
+        // 对凭据域不会、也不能有任何影响。
         entry.redacted = true
         if (layer.value !== undefined) entry.valueLength = String(layer.value).length
         return entry
@@ -372,8 +424,21 @@ export function createHostApi(options: HostApiOptions): HostApi {
       if (!requireGet(req, res)) return
       try {
         const url = new URL(req.url ?? '/', 'http://localhost')
-        // `reveal=0` 让客户端只要结构不要值（用于先渲染骨架）
-        const reveal = url.searchParams.get('reveal') !== '0'
+        /**
+         * `reveal` 的三个取值，**白名单匹配而不是前缀/宽松匹配**：
+         *
+         *   - `0`   —— 只要结构不要值（用于先渲染骨架），连摘要都不给
+         *   - `all` —— 值**含**敏感名（用户在 UI 里显式打开的开关）
+         *   - 其余（含缺省、`1`、以及任何拼错的串）—— 默认：给值，但敏感名仍遮蔽
+         *
+         * 拼错必须落到默认而不是 `all`。宽松解析（`startsWith('a')`、
+         * 真值判定、`!== '0'` 之类的取反）会把 `reveal=al`、`reveal=ALL`、
+         * `reveal=true` 静默升级成"把密钥发出去" —— 一个 typo 就是一次泄露。
+         * 所以这里写成显式的 `=== 'all'`，且只在**没有**其他解释时才生效。
+         */
+        const revealParam = url.searchParams.get('reveal')
+        const reveal = revealParam !== '0'
+        const revealSensitive = revealParam === 'all'
         // `os=0` 跳过注册表读取：读 HKLM 要起一次进程，客户端可以先不要这层
         const includeOs = url.searchParams.get('os') !== '0'
 
@@ -394,7 +459,7 @@ export function createHostApi(options: HostApiOptions): HostApi {
           osStatus = { supported: osLayer.supported, skipped: true }
         }
 
-        const body = projectState(model, { revealValues: reveal })
+        const body = projectState(model, { revealValues: reveal, revealSensitive })
         body.os = osStatus
         writeJson(res, 200, body)
       } catch (error) {

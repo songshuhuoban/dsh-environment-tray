@@ -145,6 +145,94 @@ console.log('\n--- projection shape ---')
   ok('reveal=0 still marks redaction', noValues.variables.find((v) => v.name === 'MY_TOKEN_SECRET')?.layers?.[0]?.redacted === true)
 }
 
+// ── 2b. 显式放开敏感名（`revealSensitive`）───────────────────────────────────
+// 这条路径**默认关闭**，且只能由调用方显式打开。所以这里的断言分两半：
+// 默认仍然遮蔽（与上一节逐字节相同），以及打开后的形状。
+console.log('\n--- opt-in reveal of sensitive names ---')
+{
+  /** 取某个变量在投影里的层；找不到就返回 undefined，让断言直接失败而不是抛错。 */
+  const layerOf = (state, name, index = 0) => state.variables.find((v) => v.name === name)?.layers?.[index]
+
+  const secretProjected = (state) => JSON.stringify(state).includes(SECRET)
+
+  // (a) 显式传 false 必须与"什么都不传"逐字节相同 —— 这是"默认不变"的最强形式
+  ok(
+    'revealSensitive:false is byte-identical to the default',
+    JSON.stringify(projectState(model, { revealSensitive: false })) === JSON.stringify(projected),
+  )
+  // 非布尔取值也必须留在遮蔽路径上（`=== true` 而不是真值判定）
+  const truthyNonBoolean = projectState(model, { revealSensitive: 'true' })
+  ok(
+    'a truthy non-boolean revealSensitive still redacts',
+    truthyNonBoolean.variables.find((v) => v.name === 'MY_TOKEN_SECRET')?.layers?.[0]?.redacted === true &&
+      !JSON.stringify(truthyNonBoolean).includes(SECRET),
+  )
+  // 默认路径本身：遮蔽标记在，摘要不在（这一条与上一节重复是刻意的 ——
+  // 它是本改动唯一不许回归的行为）
+  const defaultSensitiveLayer = layerOf(projected, 'MY_TOKEN_SECRET')
+  ok(
+    'the default path still redacts with no summary',
+    defaultSensitiveLayer?.redacted === true && defaultSensitiveLayer?.valueSummary === undefined,
+    JSON.stringify(defaultSensitiveLayer),
+  )
+
+  // (b) 打开 + 有值 → 敏感层拿到 valueSummary，且**不再**标 redacted
+  const opened = projectState(model, { revealSensitive: true })
+  const openedLayer = layerOf(opened, 'MY_TOKEN_SECRET')
+  ok(
+    'revealSensitive:true sends a summary for a sensitive name',
+    openedLayer?.valueSummary?.preview === SECRET,
+    JSON.stringify(openedLayer),
+  )
+  ok('revealSensitive:true drops the redacted mark', openedLayer?.redacted === undefined)
+  ok(
+    'revealSensitive:true still carries no raw value key',
+    !('value' in (openedLayer ?? {})),
+    JSON.stringify(Object.keys(openedLayer ?? {})),
+  )
+  ok('the revealed secret appears exactly once in the payload', opened.variables.filter((v) => JSON.stringify(v).includes(SECRET)).length === 1)
+
+  // (c) 打开 + reveal=0 → 只给长度。**摘要绝不能出现**，否则 reveal=0 就名不副实
+  const openedNoValues = projectState(model, { revealSensitive: true, revealValues: false })
+  const openedNoValuesLayer = layerOf(openedNoValues, 'MY_TOKEN_SECRET')
+  ok(
+    'revealSensitive:true + revealValues:false gives only the length',
+    openedNoValuesLayer?.valueLength === SECRET.length,
+    JSON.stringify(openedNoValuesLayer),
+  )
+  ok(
+    'revealSensitive:true + revealValues:false carries NO summary',
+    openedNoValuesLayer?.valueSummary === undefined,
+    JSON.stringify(openedNoValuesLayer),
+  )
+  ok('revealSensitive + reveal=0 omits the secret text', !secretProjected(openedNoValues))
+  ok(
+    'revealSensitive + reveal=0 does not resurrect the redacted mark',
+    openedNoValuesLayer?.redacted === undefined,
+    JSON.stringify(openedNoValuesLayer),
+  )
+
+  // (d) 凭据域在**两种**模式下都必须完全没有值可给。
+  //     它不是"不愿意给"，而是物理上没有承载值的字段：模型里根本不存在
+  //     `credential` 层（`SOURCE_ORDER` 只含 process/project-env/user-env），
+  //     所以任何投影里都不该出现这一层，也就没有任何字段能搭载密钥。
+  const credentialLayersOf = (state) =>
+    state.variables.flatMap((v) => v.layers.filter((l) => l.layer === 'credential'))
+  ok('NO CREDENTIAL LAYER in the model', !model.variables.some((v) => v.layers.some((l) => l.layer === 'credential')))
+  ok(
+    'NO CREDENTIAL LAYER in either mode (default / revealed / revealed-without-values)',
+    credentialLayersOf(projected).length === 0 &&
+      credentialLayersOf(opened).length === 0 &&
+      credentialLayersOf(openedNoValues).length === 0,
+    [
+      credentialLayersOf(projected).length,
+      credentialLayersOf(opened).length,
+      credentialLayersOf(openedNoValues).length,
+    ].join('/'),
+  )
+  ok('the revealed payload still contains no credential secret', !secretProjected(openedNoValues))
+}
+
 // ── 3. 路由注册走 ctx.inject + ctx.effect ──────────────────────────────────
 console.log('\n--- route registration path ---')
 const registeredRoutes = []
@@ -311,7 +399,81 @@ console.log('\n--- handler behaviour ---')
   ok('reveal=0 returns 200', res2.captured.status === 200)
   ok('reveal=0 body omits plain values', !res2.captured.body.includes(PLAIN))
 
-  // 方法限制
+  // ── reveal 查询参数：`all` 是"含敏感名"，且只认字面量 ────────────────────
+  // 默认（缺省 / `1`）与 `reveal=0` 的含义一个字都没变；多出来的只有 `all`。
+  // 关键是**拼错不能升级成 all** —— 那等于一个 typo 就把密钥发出去。
+  //
+  // 这一段用**独立的** api + 假 OS 层：敏感名从假注册表来，既不改动上面那些
+  // 断言的响应，也不依赖临时目录里的 `.env`（projectDir 里刻意没有敏感名）。
+  const ROUTE_SECRET = 'sk-route-level-secret-value'
+  const routeOsLayer = {
+    supported: true,
+    async readAll() {
+      return {
+        [USER_SCOPE]: { scope: USER_SCOPE, entries: [{ name: 'ROUTE_TOKEN_SECRET', type: 'REG_SZ', value: ROUTE_SECRET }] },
+        [MACHINE_SCOPE]: { scope: MACHINE_SCOPE, entries: [] },
+      }
+    },
+  }
+  const revealApi = createHostApi({ ctx: apiCtx, osLayer: routeOsLayer, guard: () => true })
+  const callState = async (query) => {
+    const res = fakeRes()
+    await revealApi.state(fakeReq(`${STATE_ROUTE}?${query}`), res)
+    // 返回的是 `captured` 而不是 `res`：断言直接读 status/headers/body，
+    // 与上面几节 `.captured.status` 的写法等价，但少一层噪音。
+    return res.captured
+  }
+  const sensitiveLayerOf = (captured) =>
+    JSON.parse(captured.body).variables.find((v) => v.name === 'ROUTE_TOKEN_SECRET')?.layers?.[0]
+
+  const plainRoute = await callState('')
+  const allRoute = await callState('reveal=all')
+  ok(
+    'the route fixture really carries a sensitive registry variable',
+    sensitiveLayerOf(plainRoute) !== undefined,
+    JSON.stringify(sensitiveLayerOf(plainRoute)),
+  )
+  ok('the default route response redacts the sensitive name', sensitiveLayerOf(plainRoute)?.valueSummary === undefined)
+  ok('the default route response keeps the sensitive length', sensitiveLayerOf(plainRoute)?.valueLength === ROUTE_SECRET.length)
+  ok(
+    'reveal=all returns 200',
+    allRoute.status === 200,
+    String(allRoute.status),
+  )
+  ok(
+    'reveal=all sends a summary for the sensitive name',
+    sensitiveLayerOf(allRoute)?.valueSummary?.preview === ROUTE_SECRET,
+    JSON.stringify(sensitiveLayerOf(allRoute)),
+  )
+  ok('reveal=all drops the redacted mark', sensitiveLayerOf(plainRoute)?.redacted === true && sensitiveLayerOf(allRoute)?.redacted === undefined)
+
+  // 严格性：只有字面量 `all` 才算 all。下面每一个都必须是"默认"，不是 all。
+  for (const bogus of ['1', 'yes-please', 'all ', 'ALL', 'al', 'true', '2', 'on', '']) {
+    const bogusLayer = sensitiveLayerOf(await callState(`reveal=${encodeURIComponent(bogus)}`))
+    ok(
+      `reveal=${JSON.stringify(bogus)} is treated as the default, not all`,
+      bogusLayer?.valueSummary === undefined && bogusLayer?.valueLength === ROUTE_SECRET.length,
+      JSON.stringify(bogusLayer),
+    )
+  }
+
+  // `reveal=0` 与 `reveal=0&reveal=all` 都不许出现值：后者证明 `all` 不能把
+  // `reveal=0` 的"连摘要都不给"改掉（`URLSearchParams` 取第一个值）。
+  for (const query of ['reveal=0', 'reveal=0&reveal=all']) {
+    const zeroRoute = await callState(query)
+    const zeroLayer = sensitiveLayerOf(zeroRoute)
+    ok(
+      `${query} yields length only, no summary`,
+      zeroLayer?.valueSummary === undefined && zeroLayer?.valueLength === ROUTE_SECRET.length,
+      JSON.stringify(zeroLayer),
+    )
+    ok(`${query} never puts the secret on the wire`, !zeroRoute.body.includes(ROUTE_SECRET))
+  }
+
+  // 缺省必须与 `reveal=1` **逐字节相同**（`all` 是唯一的增量）
+  ok('an absent reveal is byte-identical to reveal=1', plainRoute.body === (await callState('reveal=1')).body)
+
+  // 方式限制
   const res3 = fakeRes()
   await api.state(fakeReq(STATE_ROUTE, 'POST'), res3)
   ok('POST is rejected with 405', res3.captured.status === 405, String(res3.captured.status))

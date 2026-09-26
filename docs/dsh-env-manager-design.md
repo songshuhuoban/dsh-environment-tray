@@ -2506,6 +2506,116 @@ props 都是**从被打包的实现里读出来的**，不靠名字猜（磁盘�
 
 ---
 
+## 33. P21：宽度、排序、以及"敏感值能不能看"（2026-09-27）
+
+### 33.1 模态框宽度与响应式
+
+内容就是 KEY/VALUE，横向越宽越好扫，所以显式放宽：
+
+```css
+.dsh-envmgr-dialog { width: min(1080px, calc(100vw - 48px)); max-width: none; }
+@media (max-width: 760px) {
+  .dsh-envmgr-dialog { width: calc(100vw - 16px); }
+  .dsh-envmgr-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 2px; }
+  .dsh-envmgr-valuecell { grid-column: 1 / -1; }   /* VALUE 换到第二行 */
+}
+```
+
+两处细节值得记：
+
+- **能覆盖 `Modal` 自己的宽度**，是因为两边都是单类选择器，同优先级下**后出现在
+  文档里的胜出**，而这张表是运行时追加到 `<head>` 末尾的。不需要 `!important`。
+- **网格必须从内联样式搬进样式表** —— 内联样式赢不过媒体查询，窄屏的"三列压两列"
+  就无从实现。类名因此变成 `.dsh-envmgr-row` / `.dsh-envmgr-valuecell`，
+  门禁也改成按类名找行（比"哪一行有 gridTemplateColumns"更稳）。
+
+### 33.2 排序：按"要改它该去哪一层"，不按"当前谁在生效"
+
+环境模型把「启动环境」放在最高优先级 —— 它确实最权威。但界面照那个顺序排，
+首屏全是 `ComSpec` / `DriverData` / `FRP_HOME` 这类系统继承来的噪音，而用户真正
+要改的东西被压到看不见的地方。
+
+所以分组依据改成**第一个可写的层**：
+
+```ts
+const WRITABLE_ORDER = ['project-env', 'user-env', 'os-user', 'os-machine']
+const writableLayerOf = (v) =>
+  WRITABLE_ORDER.find((layer) => v.layers.some((l) => l.layer === layer && l.writable === true))
+```
+
+于是 `PATH`（当前值来自启动环境，但能在项目 `.env` 里覆盖）归入**项目 .env 组**，
+而不是"只读继承"。当前生效层仍然写在行尾注解里（`启动环境`），信息没丢。
+
+分组顺序：
+
+```
+运行时 DSH_*  →  项目 .env  →  用户 .env（$DSH_HOME）  →  凭据库  →  密钥（凭据域）
+              →  注册表 · 用户  →  注册表 · 系统  →  启动环境（无处可写，只读）
+```
+
+这给出一条**很好读的规则：上面几组都能改，最后一组不能改。** 门禁把它钉住了 ——
+断言可写组里的行有「编辑」按钮、只读组的行没有。
+
+顺带修掉一个位置错误：密钥面板原本渲染在所有变量组**之后**，会被上百个系统变量
+埋掉。现在它插在凭据域那一组之后（没有该组时插在「用户 .env」之后）。
+
+### 33.3 敏感值开关
+
+诉求是"用一个 toggle 让密钥可被看见，默认看不见"。这里有一条必须说清的边界：
+
+- **凭据域（`credential`）永远看不到值。** 不是策略，而是**没有这个字段**：
+  `SOURCE_ORDER` 只产出 `process` / `project-env` / `user-env` 三层，
+  `mergeOsLayers()` 只产出 `os-user` / `os-machine`，`credential` 这个联合成员是
+  残留的；`CredentialInfo` / `CredentialView` 都没有值字段，`CredentialProvider`
+  刻意不声明 `resolve`。所以开关对它无能为力，界面也不该暗示可以。
+- **名字像密钥、但值来自 `.env` / 注册表的变量**，宿主原本按名字一律屏蔽。开关
+  打开时用 `reveal=all` 请求，宿主才回摘要。
+
+宿主侧的接口（`src/host-api.ts`）：
+
+```
+reveal 缺省 / 1     → 有值，敏感名只回长度        （与改动前逐字节相同）
+reveal=0            → 连摘要都不给，只回长度
+reveal=all          → 敏感名也回摘要
+其它任何值           → 按缺省处理（严格，不做宽松匹配）
+```
+
+`ProjectStateOptions.revealSensitive?: boolean` 用 `=== true` 收口，所以
+`"true"` / `1` / `undefined` 都留在屏蔽路径上。
+
+**信任论证**（写在 `host-api.ts` 那个分支的注释里）：路由本来就在
+`connection.requestRejection` 后面（Host/Origin 栅栏 + 会话鉴权），而同一道门后面
+就是 `POST /api/env-manager/env` 与 `POST /api/env-manager/credentials` ——
+**能写就能读回**，这不是新增的攻击面。凭据域之所以仍然不透明，是因为它物理上
+没有值可给。
+
+客户端侧：`Switch`（DSH 自己的开关组件）默认关、**不持久化**（每次打开模态框都要
+重新打开），打开时才带 `reveal=all` 重新取一次。密文提示要**说清是谁屏蔽的**：
+
+- 开关没开 → 「名字像密钥，默认不取回值；打开工具条里的「显示敏感值」即可查看」——
+  可行动；
+- 开关已开却还是空 → 「宿主没有回传这个值（凭据域在契约上只提供'是否已配置'）」——
+  不可行动，这时不该诱导用户去点开关。
+
+### 33.4 验证
+
+- `verify-host-api.mjs` 97 → **131**：默认路径**逐字节相同**（用 `git cat-file blob`
+  取出改动前的产物，与新版在同一个模型上对比 `JSON.stringify`）；只有 `reveal=all`
+  会出现摘要；`reveal=0` 叠加 `all` 仍然是"只有长度"；`1` / `yes-please` / `all ` /
+  `ALL` / `al` / `true` / `2` / `on` / `""` 全部留在默认路径；凭据层**在任何模式下**
+  都不含值。
+  这些断言还**被反向变异测试过**：故意让 `revealSensitive` 恒为 false（6 项失败）、
+  故意把匹配放宽成 `startsWith('a')`（3 项失败 —— `all ` / `ALL` / `al` 都会泄露）、
+  故意让 `all` 绕过 `reveal=0`（4 项失败）。**断言能被自己制造的错误推翻，才算断言。**
+- `verify-client-ui.mjs` 63 → **92**：新增宽度与响应式（含"规则确实在
+  `lib/client.js` 里"，读产物而不是读源码）、分组顺序与"只读组不可编辑"、
+  以及开关的默认关闭 / 恰好一次 `reveal=all` / 值出现 / 凭据行开着也没值。
+- 门禁里的脚本改成**按行名定位**（`{ row: 'PATH', click: '编辑' }`）而不是按序号 ——
+  分组顺序一变，序号就会落到别的变量上而测试仍然"通过"。这个脆弱性在加
+  `MY_USER_TOOL` 之后立刻暴露：第 3 个「编辑」变成了别的变量。
+
+---
+
 ## 附录：事实来源
 
 - 本机 DSH 安装：`C:\Users\qq651\AppData\Local\npm-cache\_npx\1e7f6d9597241db0\node_modules\@deepseek-ai\`（240 个包，v0.1.5-rc.3）

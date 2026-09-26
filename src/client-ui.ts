@@ -52,17 +52,44 @@ export const T = {
   group: { fontSize: '11px', fontWeight: 520, letterSpacing: '0.06em', opacity: 0.5 },
 } as const
 
-/** 注入一次的小样式表：只放内联 style 表达不了的伪类。 */
+/** 注入一次的小样式表：只放内联 style 表达不了的伪类与媒体查询。 */
 const STYLE_ID = 'dsh-env-manager-client-style'
 
+/**
+ * 这张表负责三件内联样式做不到的事：
+ *
+ * 1. **`:hover` / `:focus-within`** —— 行尾操作按需出现；
+ * 2. **响应式** —— 窄屏把三列压成两列，VALUE 换到第二行；
+ * 3. **模态框宽度** —— 内容就是 KEY/VALUE，横向越宽越好扫，所以显式放宽到
+ *    1080px（`Modal` 自带的默认宽度对这张表偏窄）。能覆盖它是因为两边都是
+ *    单类选择器，同优先级下**后出现在文档里的胜出**，而这张表是运行时追加到
+ *    `<head>` 末尾的。
+ */
 const CSS = `
+.dsh-envmgr-dialog { width: min(1080px, calc(100vw - 48px)); max-width: none; }
+.dsh-envmgr-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 260px) minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 12px;
+  padding: 5px 8px;
+  border-radius: 6px;
+}
 .dsh-envmgr-row:hover { background: var(--dsw-alias-fill-quaternary, rgba(128,128,128,0.10)); }
 .dsh-envmgr-actions { opacity: 0; transition: opacity .12s ease; }
 .dsh-envmgr-row:hover .dsh-envmgr-actions,
 .dsh-envmgr-row:focus-within .dsh-envmgr-actions { opacity: 1; }
 @media (hover: none) { .dsh-envmgr-actions { opacity: 1; } }
-.dsh-envmgr-scroll { max-height: 58vh; overflow-y: auto; overscroll-behavior: contain; }
-.dsh-envmgr-value:hover { text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
+.dsh-envmgr-scroll { max-height: min(62vh, 760px); overflow-y: auto; overscroll-behavior: contain; }
+.dsh-envmgr-valuecell { min-width: 0; }
+.dsh-envmgr-valuecell:hover { text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
+
+/* 窄屏：KEY 与注解一行，VALUE 独占下一行 —— 竖着扫仍然成立，且不再横向溢出 */
+@media (max-width: 760px) {
+  .dsh-envmgr-dialog { width: calc(100vw - 16px); }
+  .dsh-envmgr-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 2px; }
+  .dsh-envmgr-valuecell { grid-column: 1 / -1; }
+}
 `
 
 /**
@@ -85,7 +112,8 @@ export function installClientStyles(): void {
 /**
  * 一行。三列网格：KEY 定宽、VALUE 占满、注解靠右。
  *
- * KEY 用 `minmax` 而不是固定宽度：短名字不浪费空间，遇到
+ * 网格定义在样式表里而不是内联：窄屏要换成两列，而媒体查询赢不过内联样式。
+ * KEY 用 `minmax(140px, 260px)`：短名字不浪费空间，遇到
  * `HUOSHAN_DOUBAO_ACCESS_TOKEN` 这种长名字也不会把 VALUE 挤没。
  */
 export function Row(props: { children?: React.ReactNode; active?: boolean }): React.ReactElement {
@@ -94,12 +122,6 @@ export function Row(props: { children?: React.ReactNode; active?: boolean }): Re
     {
       className: 'dsh-envmgr-row',
       style: {
-        display: 'grid',
-        gridTemplateColumns: 'minmax(120px, 24%) minmax(0, 1fr) auto',
-        alignItems: 'baseline',
-        columnGap: '10px',
-        padding: '5px 8px',
-        borderRadius: '6px',
         background: props.active === true ? 'var(--dsw-alias-fill-quaternary, rgba(128,128,128,0.10))' : 'transparent',
       },
     },
@@ -135,10 +157,11 @@ export function Key(props: { children?: React.ReactNode; title?: string }): Reac
 }
 
 /**
- * VALUE：另一个主角。等宽、可省略、可见时可点击复制。
+ * VALUE：另一个主角。等宽、可省略。
  *
- * `masked` 用点阵表示"宿主有个值但从不回传" —— 这比空白更能说明状态，
- * 也明确告诉用户这里不可能看到内容（凭据域的契约）。
+ * `masked` 用点阵表示"宿主不回传这个值" —— 这比空白更能说明状态。
+ * 两类情况会走到这里：凭据域（契约上根本没有值可给），以及用户没有打开
+ * 「显示敏感值」时宿主按名字屏蔽的值（见设计文档 §33）。
  */
 export function Value(props: {
   children?: React.ReactNode
@@ -146,18 +169,18 @@ export function Value(props: {
   onClick?: () => void
   masked?: boolean
 }): React.ReactElement {
-  const interactive = props.onClick !== undefined
   return React.createElement(
     'span',
     {
-      className: interactive ? 'dsh-envmgr-value' : undefined,
+      // 类名恒定：窄屏要在媒体查询里把它换到第二行，而媒体查询赢不过内联样式
+      className: 'dsh-envmgr-valuecell',
       style: {
         ...T.value,
         fontFamily: MONO,
         overflow: 'hidden',
         textOverflow: 'ellipsis',
         whiteSpace: 'nowrap',
-        ...(interactive ? { cursor: 'pointer' } : {}),
+        ...(props.onClick === undefined ? {} : { cursor: 'pointer' }),
       },
       ...(props.title === undefined ? {} : { title: props.title }),
       ...(props.onClick === undefined ? {} : { onClick: props.onClick }),

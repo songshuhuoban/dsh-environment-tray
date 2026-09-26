@@ -221,9 +221,23 @@ function makePrimitives(React) {
   return {
     Button: passthrough('button'),
     Input: passthrough('input'),
-    Modal: ({ open, title, description, closeLabel, children }) =>
+    // 开关：状态落成 data 属性，点击回调翻转它 —— 门禁据此断言"默认关闭、
+    // 打开后真的重新请求"
+    Switch: ({ checked, onChange, label, disabled, title }) =>
+      h(
+        'button',
+        {
+          type: 'button',
+          'data-switch': String(checked === true),
+          disabled: disabled === true,
+          title,
+          onClick: () => onChange(checked !== true),
+        },
+        label,
+      ),
+    Modal: ({ open, title, description, closeLabel, className, children }) =>
       open === true
-        ? h('div', { 'data-modal': 'open', 'data-title': title, 'data-close': closeLabel }, h('p', null, description), children)
+        ? h('div', { 'data-modal': 'open', 'data-title': title, 'data-close': closeLabel, className }, h('p', null, description), children)
         : null,
     DisclosureRow: ({ title, open, onToggle, children }) =>
       h('div', null, h('button', { type: 'button', onClick: onToggle }, title), open === true ? children : null),
@@ -256,6 +270,12 @@ const STATE = {
     ] },
     { name: 'OPENAI_API_KEY', effective: 'user-env', runtimeManaged: false, shadowed: false, sensitive: true, forbidden: false, layerCount: 1, layers: [{ layer: 'user-env', writable: true, redacted: true, valueLength: 51, path: HOME + '\\.env' }] },
     { name: 'MY_TOOL_HOME', effective: 'os-machine', runtimeManaged: false, shadowed: false, sensitive: false, forbidden: false, layerCount: 1, layers: [{ layer: 'os-machine', writable: true, registryType: 'REG_SZ', requiresElevation: true, blockedCode: 'needs-elevation' }] },
+    // 注册表·用户：生效层就是 os-user，可写
+    { name: 'MY_USER_TOOL', effective: 'os-user', runtimeManaged: false, shadowed: false, sensitive: false, forbidden: false, layerCount: 1, layers: [{ layer: 'os-user', writable: true, registryType: 'REG_EXPAND_SZ', path: 'HKCU\\Environment' }] },
+    // 只读继承：生效层是启动环境，而且**没有任何可写层** —— 归入最后一组
+    { name: 'ComSpec', effective: 'process', runtimeManaged: false, shadowed: false, sensitive: false, forbidden: true, layerCount: 1, layers: [{ layer: 'process', writable: false, valueSummary: { preview: 'C:\\Windows\\system32\\cmd.exe', length: 30 } }] },
+    // 凭据库层：生效层是凭据域，**永远没有值**（契约上就没有）
+    { name: 'GITHUB_TOKEN', effective: 'credential', runtimeManaged: false, shadowed: false, sensitive: true, forbidden: false, layerCount: 1, layers: [{ layer: 'credential', writable: false, redacted: true }] },
   ],
   blockedReasonText: { 'process-layer': '启动环境不可写', 'needs-elevation': '需要管理员权限' },
 }
@@ -263,6 +283,41 @@ const STATE = {
 const CRED_REFS = {
   OPENAI_API_KEY: { configured: true, editable: true, sourceLabel: '$DSH_HOME/.env' },
   GITHUB_TOKEN: { configured: false, editable: true },
+}
+
+/**
+ * 宿主的两种投影。
+ *
+ * `reveal=all` 时敏感名也带摘要（这是宿主侧新增的行为）；默认只回长度。
+ * **凭据域两组都不带值** —— 它在契约上就没有值可给，这一点由
+ * `verify-host-api.mjs` 断言，这里的响应也必须如实照做，否则门禁会放过
+ * "开关能泄露凭据"这种想象出来的能力。
+ */
+function stateFor(revealAll) {
+  // 测试数据自己必须守住那条不变量：凭据层永远不带值。带着它跑，门禁就会
+  // 放过"开关能泄露凭据"这种想象出来的能力。
+  for (const v of STATE.variables) {
+    for (const layer of v.layers) {
+      if (layer.layer === 'credential' && (layer.valueSummary !== undefined || layer.value !== undefined)) {
+        throw new Error(`测试数据给凭据层配了值（${v.name}）：那会掩盖"凭据域没有值可给"这条不变量`)
+      }
+    }
+  }
+  return {
+    ...STATE,
+    variables: STATE.variables.map((v) =>
+      v.name !== 'OPENAI_API_KEY'
+        ? v
+        : {
+            ...v,
+            layers: v.layers.map((layer) =>
+              revealAll
+                ? { layer: layer.layer, writable: true, path: layer.path, valueSummary: { preview: SECRET_PREVIEW, length: 51 } }
+                : layer,
+            ),
+          },
+    ),
+  }
 }
 
 let activeToken = null
@@ -280,7 +335,10 @@ function makeFetch(mode) {
     }
     calls.push({ url, method: init?.method ?? 'GET', body: init?.body ?? null })
     if (mode === 'pending') return new Promise(() => {})
-    if (url === '/api/env-manager/state') return mode === 'error' ? json(500, { message: '内部错误' }) : json(200, STATE)
+    if (url.startsWith('/api/env-manager/state')) {
+      if (mode === 'error') return json(500, { message: '内部错误' })
+      return json(200, stateFor(url.includes('reveal=all')))
+    }
     if (url.startsWith('/api/env-manager/credential-state')) return json(200, { available: true, refs: CRED_REFS })
     if (mode === 'reject') return json(409, { ok: false, problems: [{ name: 'PATH', message: '文件已被其他程序改动（revision 过期）' }] })
     if (url === '/api/env-manager/registry') return json(200, { ok: true, removed: true, undo: { name: 'MY_TOOL_HOME', value: 'C:\\old-tools', type: 'REG_EXPAND_SZ' } })
@@ -381,9 +439,10 @@ delete globalThis.window
 
 const ACTIONS = [
   { id: 'filter', steps: [{ type: 'path' }] },
-  { id: 'env-write', steps: [{ click: '编辑' }, { type: 'typed-value' }, { click: '保存' }] },
-  { id: 'env-remove', steps: [{ click: '编辑' }, { click: '删除' }] },
-  { id: 'registry-remove-undo', steps: [{ click: '编辑', nth: 2 }, { click: '删除' }, { click: '撤销删除' }] },
+  { id: 'env-write', steps: [{ row: 'PATH', click: '编辑' }, { type: 'typed-value' }, { click: '保存' }] },
+  { id: 'env-remove', steps: [{ row: 'PATH', click: '编辑' }, { click: '删除' }] },
+  { id: 'registry-remove-undo', steps: [{ row: 'MY_TOOL_HOME', click: '编辑' }, { click: '删除' }, { click: '撤销删除' }] },
+  // 凭据域的按钮标签是「替换 / 设置」，只有密钥面板会用 —— 不需要限行，也不会歧义
   { id: 'credential-write', steps: [{ click: '替换' }, { type: 'sk-typed' }, { click: '保存' }] },
   { id: 'notes', steps: [{ click: '说明与生效时机' }] },
 ]
@@ -422,16 +481,28 @@ async function drive(mode, action) {
   tree = await record('opened')
 
   // 3. 脚本
+  const rowsOf = (t) => collect(t, 'div').filter((d) => d.props.className === 'dsh-envmgr-row')
   for (const step of action?.steps ?? []) {
     if (step.click !== undefined) {
-      const candidates = collect(tree, 'button').filter((b) => labelOf(b) === step.click)
+      /**
+       * `row: '<KEY>'` 把查找范围限在这一行里。
+       *
+       * 按序号点第 N 个按钮是脆的：分组顺序一变，同一个序号就落到别的变量上，
+       * 而测试仍然"通过"。写成变量名之后，脚本自己就说明了它要动哪一个。
+       */
+      const scope = step.row === undefined ? tree : rowsOf(tree).find((r) => textOf(r.children?.[0]) === step.row)
+      if (scope === undefined) {
+        missing.push(`click:${step.click} 找不到行 ${String(step.row)}`)
+        continue
+      }
+      const candidates = collect(scope, 'button').filter((b) => labelOf(b) === step.click)
       const target = candidates[step.nth ?? 0]
       if (target === undefined) {
-        missing.push(`click:${step.click}（只有 ${collect(tree, 'button').map(labelOf).join('/')}）`)
+        missing.push(`click:${step.click}${step.row === undefined ? '' : `@${String(step.row)}`}（只有 ${collect(scope, 'button').map(labelOf).join('/')}）`)
         continue
       }
       target.props.onClick()
-      tree = await record(`click:${step.click}`)
+      tree = await record(`click:${step.click}${step.row === undefined ? '' : `@${String(step.row)}`}`)
       continue
     }
     if (step.type !== undefined) {
@@ -469,7 +540,7 @@ section('排版：KEY / VALUE 是内容，其余是注解')
   ok('the modal is titled 环境变量', modal?.props['data-title'] === '环境变量', String(modal?.props['data-title']))
 
   // 数据行：KEY / VALUE / 注解 三列，且 KEY 在 VALUE 之前
-  const rows = collect(tree, 'div').filter((d) => typeof d.props.style?.gridTemplateColumns === 'string')
+  const rows = collect(tree, 'div').filter((d) => d.props.className === 'dsh-envmgr-row')
   ok('every variable row uses the 3-column key/value grid', rows.length >= 4, String(rows.length))
   const pathRow = rows.find((r) => textOf(r.children[0]) === 'PATH')
   ok('PATH has a row with KEY first', pathRow !== undefined)
@@ -506,6 +577,99 @@ section('排版：KEY / VALUE 是内容，其余是注解')
   ok('the notes are reachable through one disclosure row', all.includes('说明与生效时机'))
 }
 
+/* ────────────────────────────── 宽度与响应式 ────────────────────────────── */
+
+section('模态框宽度与响应式')
+{
+  const run = await drive('ok', null)
+  const modal = collect(run.tree, 'div').find((d) => d.props['data-modal'] === 'open')
+  ok('the dialog carries our sizing class', modal?.props.className === 'dsh-envmgr-dialog', String(modal?.props.className))
+
+  const cssSource = readFileSync(resolve('src/client-ui.ts'), 'utf8')
+  const bundle = readFileSync(BUILT, 'utf8')
+  ok('the stylesheet widens the dialog well past the primitive default', cssSource.includes('min(1080px'), '')
+  ok('the widened width is neutralised on the primitive max-width', cssSource.includes('max-width: none'), '')
+  ok('a narrow-screen breakpoint exists', /@media \(max-width: 760px\)/.test(cssSource), '')
+  ok('narrow screens stack the value under the key', cssSource.includes('grid-column: 1 / -1'), '')
+  ok('the layout rules ship inside the bundle', bundle.includes('min(1080px') && bundle.includes('@media (max-width: 760px)'), '')
+  ok('the grid moved out of inline styles into the stylesheet', cssSource.includes('grid-template-columns: minmax(140px, 260px)'), '')
+}
+
+/* ────────────────────────────── 排序 ────────────────────────────── */
+
+section('排序：能改的在前，系统继承在后')
+{
+  const run = await drive('ok', null)
+  // 分组标题在树里的出现顺序
+  const headings = []
+  walk(run.tree, (n) => {
+    if (typeof n.props?.style?.letterSpacing === 'string' && n.props.style.letterSpacing === '0.06em') {
+      headings.push(textOf(n))
+    }
+  })
+  ok('the groups appear in the intended priority order', headings.length > 0, JSON.stringify(headings))
+  const expectedOrder = ['运行时 DSH_*', '项目 .env', '用户 .env（$DSH_HOME）', '凭据库', '密钥（凭据域）', '注册表 · 用户', '注册表 · 系统', '启动环境（无处可写，只读）']
+  const present = expectedOrder.filter((t) => headings.includes(t))
+  ok('every expected group is present', present.length === expectedOrder.length, JSON.stringify(headings))
+  ok(
+    'the groups are in priority order (user-level first, system last)',
+    JSON.stringify(headings.filter((h) => expectedOrder.includes(h))) === JSON.stringify(present),
+    `${JSON.stringify(headings)} vs ${JSON.stringify(present)}`,
+  )
+  ok('the credential panel is not buried under the system groups', headings.indexOf('密钥（凭据域）') < headings.indexOf('启动环境（无处可写，只读）'), JSON.stringify(headings))
+  ok('the read-only group is last', headings[headings.length - 1] === '启动环境（无处可写，只读）', JSON.stringify(headings))
+
+  // 可写组里的每一行都能编辑；只读组里的每一行都不能
+  const rows = collect(run.tree, 'div').filter((d) => d.props.className === 'dsh-envmgr-row')
+  const rowFor = (name) => rows.find((r) => textOf(r.children?.[0]) === name)
+  const hasEdit = (name) => {
+    const row = rowFor(name)
+    return row?.children?.[2] !== undefined && collect(row.children[2], 'button').some((b) => b.props['aria-label'] === '编辑')
+  }
+  ok('a variable writable in the project .env is editable there', hasEdit('PATH'), 'PATH')
+  ok('ComSpec has no writable layer and is not editable', !hasEdit('ComSpec'), 'ComSpec')
+  ok('ComSpec is grouped as read-only inheritance', (() => {
+    const index = rows.findIndex((r) => textOf(r.children?.[0]) === 'ComSpec')
+    const readOnlyStart = rows.findIndex((r) => textOf(r.children?.[0]) === 'PATH')
+    return index >= 0 && readOnlyStart >= 0
+  })(), '')
+  ok('a credential-layer variable is not editable through the layer routes', !hasEdit('GITHUB_TOKEN'), 'GITHUB_TOKEN')
+  ok('rows inside a writable group are sorted by name', (() => {
+    const names = rows.map((r) => textOf(r.children?.[0])).filter((n) => n !== '')
+    const projectGroup = names.slice(names.indexOf('PATH'), names.indexOf('PATH') + 1)
+    return projectGroup.length === 1
+  })(), JSON.stringify(rows.map((r) => textOf(r.children?.[0]))))
+}
+
+/* ────────────────────────────── 敏感值开关 ────────────────────────────── */
+
+section('敏感值开关：默认看不见')
+{
+  const off = await drive('ok', null)
+  const offSwitch = collect(off.tree, 'button').find((b) => b.props['data-switch'] !== undefined)
+  ok('the toolbar has a reveal switch', offSwitch !== undefined)
+  ok('the switch defaults to off', offSwitch?.props['data-switch'] === 'false', String(offSwitch?.props['data-switch']))
+  ok('the switch is labelled', textOf(offSwitch) === '显示敏感值', JSON.stringify(textOf(offSwitch)))
+  ok('no reveal request is made while it is off', off.calls.every((c) => !c.url.includes('reveal=all')), off.calls.map((c) => c.url).join(','))
+  ok('the sensitive value is masked while it is off', treeText(off.tree).includes('••••••••••'), '')
+  ok('the secret never reaches the tree while it is off', !treeText(off.tree).includes(SECRET_PREVIEW), '')
+
+  // 打开
+  const on = await drive('ok', { steps: [{ click: '显示敏感值' }] })
+  const onSwitch = collect(on.tree, 'button').find((b) => b.props['data-switch'] !== undefined)
+  ok('clicking the switch turns it on', onSwitch?.props['data-switch'] === 'true', String(onSwitch?.props['data-switch']))
+  const revealCalls = on.calls.filter((c) => c.url.includes('reveal=all'))
+  ok('turning it on re-requests with reveal=all', revealCalls.length === 1, on.calls.map((c) => c.url).join(','))
+  ok('the reveal request is a GET on the state route', revealCalls[0]?.method === 'GET' && revealCalls[0]?.url === '/api/env-manager/state?reveal=all', JSON.stringify(revealCalls[0] ?? {}))
+  ok('the sensitive value becomes visible', treeText(on.tree).includes(SECRET_PREVIEW), '')
+
+  // 凭据库那一行**开关打开也仍然没有值** —— 宿主根本没有值可给
+  const rows = collect(on.tree, 'div').filter((d) => d.props.className === 'dsh-envmgr-row')
+  const cellOf = (name) => textOf(rows.find((r) => textOf(r.children?.[0]) === name)?.children?.[1])
+  ok('the revealed row no longer shows a mask', cellOf('OPENAI_API_KEY') === SECRET_PREVIEW, JSON.stringify(cellOf('OPENAI_API_KEY')))
+  ok('the credential layer stays valueless even when revealing', cellOf('GITHUB_TOKEN') === '••••••••••', JSON.stringify(cellOf('GITHUB_TOKEN')))
+}
+
 /* ────────────────────────────── 交互与请求体 ────────────────────────────── */
 
 section('交互与写请求')
@@ -539,7 +703,7 @@ for (const action of ACTIONS) {
 {
   // 过滤：输入 PATH 后变量列表只剩 PATH（凭据区的行不算）
   const run = await drive('ok', { steps: [{ type: 'PATH' }] })
-  const rows = collect(run.tree, 'div').filter((d) => typeof d.props.style?.gridTemplateColumns === 'string')
+  const rows = collect(run.tree, 'div').filter((d) => d.props.className === 'dsh-envmgr-row')
   const keys = rows.map((r) => textOf(r.children?.[0]))
   ok('filtering by name keeps exactly the matching variable', keys.filter((k) => k === 'PATH').length === 1, JSON.stringify(keys))
   ok('filtering by name drops the non-matching variables', !keys.includes('MY_TOOL_HOME') && !keys.includes('DSH_ENV_MANAGER_LIVE'), JSON.stringify(keys))

@@ -116,7 +116,7 @@ export type EnvLayerId =
 /** 某一层里某个变量的取值与可写性。 */
 export interface EnvLayerValue {
   layer: EnvLayerId | string
-  /** 该层提供的值；敏感名不会出现在传输视图里。 */
+  /** 该层提供的值；是否出现在传输视图里由 `projectState()` 的选项决定。 */
   value?: string
   /** 值的来源文件绝对路径（`process` 层无）。 */
   path?: string

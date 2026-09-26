@@ -30,6 +30,7 @@ import {
   IconTrashOutline16,
   Input,
   Modal,
+  Switch,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 
 import {
@@ -151,6 +152,8 @@ interface VariableRowProps {
   expanded: boolean
   onToggle: (name: string) => void
   onSaved: () => void
+  /** 工具条上的「显示敏感值」是否打开：决定提示文案怎么说。 */
+  revealSecrets?: boolean
 }
 
 /** `CredentialPanel` 的 props。 */
@@ -254,7 +257,7 @@ async function postJson(url: string, body: unknown): Promise<HostResponse> {
 
 /** 一个变量的摘要行，含就地编辑。 */
 function VariableRow(props: VariableRowProps) {
-  const { variable, state, expanded, onToggle, onSaved } = props
+  const { variable, state, expanded, onToggle, onSaved, revealSecrets } = props
   const effectiveLayer = variable.layers.find((l) => l.layer === variable.effective)
   const summary = effectiveLayer && effectiveLayer.valueSummary ? effectiveLayer.valueSummary : undefined
 
@@ -396,13 +399,24 @@ function VariableRow(props: VariableRowProps) {
           ? `(${String(effectiveLayer.valueLength)} 字符)`
           : null
 
+  /**
+   * 被屏蔽时，提示要**说清是谁屏蔽的** —— 这两种情况的可行动作完全不同：
+   *
+   *   - 名字像密钥、开关没开 → 是**本界面**没要，打开开关就能看到（可行动）；
+   *   - 开关已开却还是空 → 宿主没有回传。凭据域在契约上就没有值可给（不可行动），
+   *     这时不该诱导用户去点开关。
+   */
+  const maskTitle = !hidden
+    ? undefined
+    : revealSecrets === true
+      ? '宿主没有回传这个值（凭据域在契约上只提供"是否已配置"）'
+      : '名字像密钥，默认不取回值；打开工具条里的「显示敏感值」即可查看'
+
   const value = React.createElement(Value, {
     masked: hidden,
     title:
       summary === undefined
-        ? hidden
-          ? '宿主从不回传密钥值'
-          : undefined
+        ? maskTitle
         : `${summary.preview}${summary.truncated === true ? ` …（共 ${String(summary.length)} 字符）` : ''}`,
     children: valueText,
   })
@@ -621,8 +635,8 @@ function CredentialPanel(props: CredentialPanelProps) {
   return React.createElement(
     React.Fragment,
     null,
-    React.createElement(GroupHeading, { title: '密钥', count: names.length }),
-    React.createElement(Note, null, '宿主**从不回传密钥值**，所以这里只表达"是否已配置"。写入后立即对 DSH 内部生效（下一次模型请求即可用），但模型执行的 shell 读不到它 —— 这是有意的安全设计。'),
+    React.createElement(GroupHeading, { title: '密钥（凭据域）', count: names.length }),
+    React.createElement(Note, null, '宿主的凭据域**只提供"是否已配置"**，任何开关都拿不到密钥值 —— 写入后立即对 DSH 内部生效（下一次模型请求即可用），但模型执行的 shell 也读不到它，这是有意的安全设计。'),
     available === false
       ? React.createElement(Note, null, '本 composition 未挂载凭据域，无法管理密钥。')
       : null,
@@ -719,7 +733,7 @@ function CredentialPanel(props: CredentialPanelProps) {
         }),
   )
 }
-/** 页签主体。 */
+/** 变量面板主体（模态框里的内容）。 */
 function EnvManagerPanel() {
   const [state, setState] = useState<EnvState | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -727,11 +741,17 @@ function EnvManagerPanel() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [filter, setFilter] = useState('')
   const [notesOpen, setNotesOpen] = useState(false)
+  /**
+   * 是否让宿主回传敏感名的值。**默认 false**，且不持久化 —— 每次打开都要重新
+   * 打开它。打开时请求带 `reveal=all`，宿主才会对名字像密钥的变量回摘要
+   * （见设计文档 §33：这是"用户明确要看"与"默认不落到浏览器"之间的取舍）。
+   */
+  const [revealSecrets, setRevealSecrets] = useState(false)
 
   const load = useCallback(() => {
     setLoading(true)
     setError(null)
-    fetch(STATE_URL)
+    fetch(revealSecrets ? STATE_URL + '?reveal=all' : STATE_URL)
       .then((res) => {
         if (!res.ok) throw new Error('HTTP ' + String(res.status))
         return res.json()
@@ -744,7 +764,8 @@ function EnvManagerPanel() {
         setError(messageOf(err))
         setLoading(false)
       })
-  }, [])
+    // `revealSecrets` 进依赖：开关一变就要用新的 `reveal` 重新取一次
+  }, [revealSecrets])
 
   useEffect(() => {
     load()
@@ -780,11 +801,60 @@ function EnvManagerPanel() {
   const needle = filter.trim().toUpperCase()
   const shown = needle.length === 0 ? variables : variables.filter((v) => v.name.toUpperCase().includes(needle))
 
-  const groups = [
-    { key: 'runtime', title: '运行时 DSH_*', items: shown.filter((v) => v.runtimeManaged === true) },
-    { key: 'shadowed', title: '多层竞争', items: shown.filter((v) => v.shadowed === true && v.runtimeManaged !== true) },
-    { key: 'plain', title: '单层变量', items: shown.filter((v) => v.shadowed !== true && v.runtimeManaged !== true) },
+  /**
+   * 分组顺序 = **"我能不能改、我多常看"**，不是环境模型里的信任顺序。
+   *
+   * 环境模型把「启动环境」放在最高优先级（它确实最权威），但界面照那个顺序排
+   * 的话，首屏全是 `ComSpec` / `DriverData` / `FRP_HOME` 这类系统继承来的噪音，
+   * 而用户真正要改的东西（项目 `.env`、`$DSH_HOME/.env`、凭据）被压到看不见的
+   * 地方。
+   *
+   * 所以分组依据是**"要改它该去哪一层"**（第一个可写的层），而不是"当前谁在生效"：
+   * `PATH` 的值现在来自启动环境，但你能在项目 `.env` 里覆盖它 —— 它属于项目组，
+   * 而不是"只读继承"。当前生效层仍然写在每行的注解里（`启动环境`），信息没丢。
+   *
+   * 这样得到一条很好读的规则：**上面几组都能改，最后一组不能改**。
+   * 多层竞争不再单独成组 —— 它已经是行尾的 `遮蔽 N 层`，展开各层即可看到。
+   */
+  const WRITABLE_ORDER = ['project-env', 'user-env', 'os-user', 'os-machine'] as const
+
+  /** 要改这个变量该去哪一层：第一个可写的层；没有则 undefined。 */
+  const writableLayerOf = (v: VariableView): string | undefined =>
+    WRITABLE_ORDER.find((layer) => v.layers.some((l) => l.layer === layer && l.writable === true))
+
+  const LAYER_ORDER: readonly { key: string; title: string; effective: string }[] = [
+    { key: 'runtime', title: '运行时 DSH_*', effective: '' },
+    { key: 'project-env', title: '项目 .env', effective: 'project-env' },
+    { key: 'user-env', title: '用户 .env（$DSH_HOME）', effective: 'user-env' },
+    { key: 'credential', title: '凭据库', effective: 'credential' },
+    { key: 'os-user', title: '注册表 · 用户', effective: 'os-user' },
+    { key: 'os-machine', title: '注册表 · 系统', effective: 'os-machine' },
+    { key: 'readonly', title: '启动环境（无处可写，只读）', effective: 'process' },
   ]
+
+  const byName = (a: VariableView, b: VariableView) =>
+    a.name.localeCompare(b.name, 'en', { sensitivity: 'base', numeric: true })
+
+  const belongs = (v: VariableView, entry: { key: string; effective: string }): boolean => {
+    if (entry.key === 'runtime') return v.runtimeManaged === true
+    if (v.runtimeManaged === true) return false
+    // 凭据库看的是"生效层"，因为那一层不是写路由的目标（写凭据走密钥面板）
+    if (entry.key === 'credential') return v.effective === 'credential'
+    if (entry.key === 'readonly') return true // 兜底：上面都没接住的都归这里
+    return writableLayerOf(v) === entry.effective || v.effective === entry.effective
+  }
+
+  // 首次匹配即归属
+  const claimed = new Set<string>()
+  const groups = LAYER_ORDER.map((entry) => {
+    const items = shown.filter((v) => !claimed.has(v.name) && belongs(v, entry))
+    for (const item of items) claimed.add(item.name)
+    return { key: entry.key, title: entry.title, items: [...items].sort(byName) }
+  })
+
+  // 兜底：宿主将来加了新层，不能因为界面不认识就把变量藏起来
+  const unclaimed = shown.filter((v) => !claimed.has(v.name)).sort(byName)
+  if (unclaimed.length > 0) groups.push({ key: 'other', title: '其它层', items: unclaimed })
 
   // 密钥候选：只挑凭据形状的名字（宿主会对每个候选逐个 describe）
   const credentialNames = variables
@@ -793,6 +863,7 @@ function EnvManagerPanel() {
     .sort()
 
   const warnings = state.warnings ?? []
+  const sensitiveCount = variables.filter((v) => v.sensitive === true).length
 
   return React.createElement(
     React.Fragment,
@@ -822,6 +893,19 @@ function EnvManagerPanel() {
         { style: { ...T.meta, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' } },
         needle.length === 0 ? String(variables.length) : `${String(shown.length)} / ${String(variables.length)}`,
       ),
+      // 敏感值的开关。默认关：值不落到浏览器。打开时才用 `reveal=all` 重新取一次。
+      // 凭据库那一组无论开关都不会有值 —— 宿主的凭据域在契约上就没有值可给。
+      React.createElement(Switch, {
+        checked: revealSecrets,
+        onChange: (next: boolean) => setRevealSecrets(next),
+        label: '显示敏感值',
+        disabled: sensitiveCount === 0,
+        title:
+          (revealSecrets
+            ? '已打开：名字像密钥的变量会带上真实值一起传到浏览器。'
+            : `默认关闭：宿主只回长度不回值（当前有 ${String(sensitiveCount)} 个名字像密钥）。打开后会重新请求一次。`) +
+          '凭据库始终不含值。',
+      }),
     ),
 
     // 解析诊断必须显示：带 BOM 的文件里第一个变量名对 DSH 而言与界面显示的不同
@@ -837,35 +921,44 @@ function EnvManagerPanel() {
     React.createElement(
       ScrollArea,
       null,
-      groups.map((group) =>
-        group.items.length === 0
-          ? null
-          : React.createElement(
-              React.Fragment,
-              { key: group.key },
-              React.createElement(GroupHeading, { title: group.title, count: group.items.length }),
-              group.items
-                .slice(0, 40)
-                .map((v) =>
-                  React.createElement(VariableRow, {
-                    key: v.name,
-                    variable: v,
-                    state,
-                    expanded: expanded[v.name] === true,
-                    onToggle: toggle,
-                    onSaved: load,
-                  }),
-                ),
-              group.items.length > 40
-                ? React.createElement(
-                    Note,
-                    null,
-                    `另有 ${String(group.items.length - 40)} 项，请用过滤框缩小范围`,
-                  )
-                : null,
-            ),
-      ),
-      React.createElement(CredentialPanel, { names: credentialNames, onSaved: load }),
+      (() => {
+        /**
+         * 密钥面板插在**凭据域变量组之后**（没有那一组时就插在「用户 .env」之后）。
+         *
+         * 它讲的是同一件事（凭据域），而且属于"用户级、常看"的一类 —— 排在
+         * 注册表和上百个系统继承变量之前，才不会被埋掉。
+         */
+        const hasCredentialGroup = groups.some((g) => g.key === 'credential' && g.items.length > 0)
+        const afterKey = hasCredentialGroup ? 'credential' : 'user-env'
+
+        const nodes: React.ReactNode[] = []
+        for (const group of groups) {
+          if (group.items.length === 0) continue
+          nodes.push(
+            React.createElement(GroupHeading, { key: `h-${group.key}`, title: group.title, count: group.items.length }),
+            ...group.items
+              .slice(0, 40)
+              .map((v) =>
+                React.createElement(VariableRow, {
+                  key: v.name,
+                  variable: v,
+                  state,
+                  expanded: expanded[v.name] === true,
+                  revealSecrets,
+                  onToggle: toggle,
+                  onSaved: load,
+                }),
+              ),
+            group.items.length > 40
+              ? React.createElement(Note, { key: `m-${group.key}` }, `另有 ${String(group.items.length - 40)} 项，请用过滤框缩小范围`)
+              : null,
+          )
+          if (group.key === afterKey) {
+            nodes.push(React.createElement(CredentialPanel, { key: 'credentials', names: credentialNames, onSaved: load }))
+          }
+        }
+        return nodes
+      })(),
       shown.length === 0 ? React.createElement(Empty, null, `没有名字匹配「${filter}」`) : null,
     ),
 

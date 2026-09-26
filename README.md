@@ -44,7 +44,7 @@ dsh web
 
 ## 验证
 
-### 测试套件（10 个可运行文件，949 项断言）
+### 测试套件（10 个可运行文件，1012 项断言）
 
 ```powershell
 pnpm run build                    # 套件测的是 lib/*.js，所以先构建
@@ -52,12 +52,12 @@ node check-p0.mjs                 # 插件形态 + 客户端 bundle 契约（39�
 node verify-env-model.mjs         # 复合模型、差分测试、禁止名单保真（192）
 node verify-env-write.mjs         # 结构保留、CAS、并发、BOM（115）
 node verify-credentials.mjs       # 密钥零泄露与遮蔽分类（52）
-node verify-host-api.mjs          # 读路由、投影、reg.exe 执行器（97）
+node verify-host-api.mjs          # 读路由、投影、敏感值开关、reg.exe 执行器（131）
 node verify-registry.mjs          # 注册表解析、类型保留、并入模型（82）
 node verify-registry-roundtrip.mjs # 真写 HKCU 再清理的往返（24）
 node verify-write-routes.mjs      # 写路由、路径白名单、请求闸门（93）
 node audit-hostile-input.mjs      # 敌意输入审计：畸形请求不崩、不泄露（192）
-node verify-client-ui.mjs         # 客户端 UI：入口位置、排版层级、交互与请求体（63）
+node verify-client-ui.mjs         # 客户端 UI：入口位置、排序、敏感值开关、排版层级（92）
 
 node verify-build-parity.mjs      # 迁移期门禁：旧 lib/*.mjs 与新构建的逐模块等价（已退役）
 node audit-coverage.mjs           # 导出符号覆盖审计（应为 53/53）
@@ -74,6 +74,12 @@ node audit-readme.mjs             # 校验本 README 的断言数与实测一致
 - **排版**：KEY/VALUE 是内容、其余是注解 —— 用**可度量**的方式断言：KEY/VALUE 字号
   大于注解、注解 `opacity ≤ 0.5`、注解没有边框（不是胶囊）、KEY 在 VALUE 之前、
   密文不外泄且以点阵表示、长说明默认收起。
+- **宽度与响应式**：模态框带自己的宽度类，样式表里有窄屏断点，且这些规则**确实在
+  构建产物里**（读 `lib/client.js` 断言，而不是读源码）。
+- **排序**：分组标题的出现顺序就是"用户级在前、系统继承在后"，只读组必须最后，
+  凭据面板不能被埋在系统组下面。
+- **敏感值开关**：默认关闭且不发 `reveal=all`、密文与真实值都不在树里；打开后
+  **恰好一次** `reveal=all` 请求、值出现、遮罩消失；而凭据域那一行**开着也仍然没有值**。
 
 脚本按**按钮标签或 `aria-label`** 驱动（图标按钮没有文本），所以它顺带钉住了
 无障碍名字。

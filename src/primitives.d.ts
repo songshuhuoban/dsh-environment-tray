@@ -60,6 +60,16 @@ declare module '@deepseek-ai/dsh-client-ui-primitives' {
     headless?: boolean
   }>
 
+  /** 开关：`checked` 与 `onChange` 都由调用方持有；`label` 渲染在开关旁边。 */
+  export const Switch: React.ComponentType<{
+    checked: boolean
+    onChange: (next: boolean) => void
+    label?: React.ReactNode
+    disabled?: boolean
+    title?: string
+    className?: string
+  }>
+
   /** 可折叠行：`open` 由调用方持有。 */
   export const DisclosureRow: React.ComponentType<{
     icon?: React.ReactNode
