@@ -145,7 +145,11 @@ const fakeRequire = (spec) => {
   if (spec === 'react') {
     // 客户端半边用到 hooks，所以 fake 必须提供它们
     return {
-      createElement: (type, props, ...children) => ({ type, props, children }),
+      createElement: (type, props, ...children) => ({
+        type,
+        props: { ...(props ?? {}), children: children.length === 1 ? children[0] : children.length > 1 ? children : props?.children },
+        children,
+      }),
       Fragment: Symbol('Fragment'),
       useState: (initial) => [typeof initial === 'function' ? initial() : initial, () => {}],
       useEffect: () => {},
@@ -153,12 +157,36 @@ const fakeRequire = (spec) => {
       useMemo: (fn) => fn(),
     }
   }
+  if (spec === '@deepseek-ai/dsh-client-ui-primitives') {
+    // 平台种子模块：不在磁盘上，由前端 shell 提供。这里只把用到的组件
+    // 降级成主机元素 —— 契约细节由 verify-client-ui.mjs 覆盖。
+    const h = (type) => (props) => {
+      const { icon, children, ...rest } = props
+      return { type, props: rest, children: [icon ?? null, children ?? null] }
+    }
+    return {
+      Button: h('button'),
+      Input: h('input'),
+      Modal: ({ open, children }) => (open === true ? { type: 'div', props: { 'data-modal': 'open' }, children: [children] } : null),
+      DisclosureRow: () => null,
+      IconChevronDownOutline14: () => null,
+      IconContextInjectionOutline16: () => null,
+      IconEditOutline16: () => null,
+      IconRefreshOutline16: () => null,
+      IconSearchOutline16: () => null,
+      IconTrashOutline16: () => null,
+    }
+  }
   throw new Error(`unknown module: ${spec}`)
 }
 
 const clientExports = registered.factory(fakeRequire)
 ok('client factory exports apply()', typeof clientExports.apply === 'function')
-ok('client requires only react', requiredModules.join(',') === 'react', requiredModules.join(','))
+ok(
+  'client requires only react + the ui-primitives platform seed',
+  [...new Set(requiredModules)].sort().join(',') === '@deepseek-ai/dsh-client-ui-primitives,react',
+  [...new Set(requiredModules)].join(','),
+)
 
 // 跑一遍客户端 apply，断言注册进正确的槽位且带 id
 const registrations = []
@@ -183,26 +211,49 @@ try {
   clientApplyThrew = error
 }
 ok('client apply() does not throw', clientApplyThrew === undefined, String(clientApplyThrew ?? ''))
-ok('injects into settings.plugins.tab', injections.join(',') === 'settings.plugins.tab', injections.join(','))
-ok('registers one tab', registrations.length === 1, String(registrations.length))
 ok(
-  'tab options carry name+id+label',
-  registrations[0]?.options?.name === 'settings.plugins.tab' &&
+  'injects into the session header utilities area',
+  injections.join(',') === 'conversation.session.header.utilities',
+  injections.join(','),
+)
+ok('does not register a Settings tab', !injections.includes('settings.plugins.tab'), injections.join(','))
+ok('registers one entry', registrations.length === 1, String(registrations.length))
+ok(
+  'entry options carry name+id+order',
+  registrations[0]?.options?.name === 'conversation.session.header.utilities' &&
     registrations[0]?.options?.id === 'env-manager' &&
-    typeof registrations[0]?.options?.label === 'string',
+    typeof registrations[0]?.options?.order === 'number',
   JSON.stringify(registrations[0]?.options ?? {}),
 )
-ok('tab component is a function', typeof registrations[0]?.component === 'function')
+ok('entry component is a function', typeof registrations[0]?.component === 'function')
 
-// 渲染一次，确认组件本身不炸。用 fake hooks 模拟"加载中"分支：
-// useState(初始值) 返回初始值，所以首次渲染会走 loading 分支。
+// 渲染一次，确认组件本身不炸。fake hooks 里 useState 返回初始值，
+// 所以模态框停在关闭态 —— 入口按钮必须仍然渲染出来。
 const rendered = registrations[0].component({})
-ok('tab component renders without throwing', rendered !== undefined)
-ok(
-  'tab exposes the loader branch on first render',
-  rendered?.type === 'p',
-  JSON.stringify(rendered?.props?.children ?? rendered?.type),
-)
+ok('entry component renders without throwing', rendered !== null && rendered !== undefined)
+{
+  const flat = []
+  const collect = (node) => {
+    if (node === null || node === undefined || typeof node === 'string') return
+    if (Array.isArray(node)) {
+      for (const c of node) collect(c)
+      return
+    }
+    // 函数型节点（Button / Modal 这些假实现）要**调用**才算渲染，
+    // 否则走到的只是一层没展开的元素。真 React 也是这么做的。
+    if (typeof node.type === 'function') {
+      collect(node.type(node.props ?? {}))
+      return
+    }
+    flat.push(node)
+    for (const c of node.children ?? []) collect(c)
+  }
+  collect(rendered)
+  const entryButton = flat.find((n) => n.type === 'button')
+  ok('the closed entry renders one trigger button', flat.filter((n) => n.type === 'button').length === 1, String(flat.filter((n) => n.type === 'button').length))
+  ok('the trigger has an accessible name', entryButton?.props?.['aria-label'] === '环境变量', JSON.stringify(entryButton?.props ?? {}))
+  ok('no modal is rendered while closed', flat.every((n) => n.props?.['data-modal'] !== 'open'))
+}
 
 // ── 客户端 inject 导出（真实启动失败过的那个 bug 的回归测试）────────────────
 // 实测过的启动错误原文：

@@ -19,6 +19,36 @@
  */
 
 import * as React from 'react'
+import {
+  Button,
+  DisclosureRow,
+  IconChevronDownOutline14,
+  IconContextInjectionOutline16,
+  IconEditOutline16,
+  IconRefreshOutline16,
+  IconSearchOutline16,
+  IconTrashOutline16,
+  Input,
+  Modal,
+} from '@deepseek-ai/dsh-client-ui-primitives'
+
+import {
+  Empty,
+  GroupHeading,
+  Key,
+  LayerDetail,
+  MONO,
+  Meta,
+  Note,
+  Placeholder,
+  Row,
+  RowActions,
+  ScrollArea,
+  T,
+  Toolbar,
+  Value,
+  installClientStyles,
+} from './client-ui'
 
 const { useState, useEffect, useCallback } = React
 
@@ -187,53 +217,12 @@ const WRITABLE_LAYERS: Record<string, { url: string; kind: 'env' | 'registry' }>
   'os-machine': { url: REGISTRY_URL, kind: 'registry' },
 }
 
-const S = {
-  wrap: { display: 'flex', flexDirection: 'column', gap: '12px', padding: '12px 0' },
-  row: { display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' },
-  head: { margin: 0, fontSize: '13px', fontWeight: 500, lineHeight: 1.5 },
-  body: { margin: 0, fontSize: '12px', lineHeight: 1.6, opacity: 0.72 },
-  muted: { margin: 0, fontSize: '12px', lineHeight: 1.6, opacity: 0.55 },
-  mono: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '12px' },
-  card: {
-    border: '0.5px solid var(--dsw-alias-border-l2, rgba(128,128,128,0.25))',
-    borderRadius: '8px',
-    padding: '10px 12px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-  },
-  chip: {
-    fontSize: '11px',
-    lineHeight: 1.4,
-    padding: '1px 6px',
-    borderRadius: '4px',
-    border: '0.5px solid currentColor',
-    opacity: 0.75,
-  },
-  warn: { margin: 0, fontSize: '12px', lineHeight: 1.6, color: 'var(--dsw-alias-label-error, #d33)' },
-  okmsg: { margin: 0, fontSize: '12px', lineHeight: 1.6, color: 'var(--dsw-alias-label-success, #2a2)' },
-  button: {
-    font: 'inherit',
-    fontSize: '12px',
-    padding: '3px 10px',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    border: '0.5px solid var(--dsw-alias-border-l4, rgba(128,128,128,0.4))',
-    background: 'transparent',
-    color: 'inherit',
-  },
-  input: {
-    font: 'inherit',
-    fontSize: '12px',
-    padding: '3px 8px',
-    borderRadius: '6px',
-    border: '0.5px solid var(--dsw-alias-border-l4, rgba(128,128,128,0.4))',
-    background: 'transparent',
-    color: 'inherit',
-    minWidth: '160px',
-  },
-}
-
+/* ────────────────────────── 表现层在别处 ──────────────────────────
+ *
+ * 排版与样式全部移到 `src/client-ui.ts`。这里原来内联了 40 多个 style 片段，
+ * 正文被样式淹没 —— 而那正是"每一类信息都自带一套字号 + 边框 + 颜色"的根源，
+ * 也就是界面显得杂乱的机制。现在这一层只管数据流。
+ */
 /** 把层里的机器可读码翻译成文案（宿主只传一次文案表）。 */
 const reasonText = (state: EnvState | null, code: unknown): string =>
   (state && state.blockedReasonText && state.blockedReasonText[String(code)]) || String(code ?? '')
@@ -377,102 +366,179 @@ function VariableRow(props: VariableRowProps) {
     }
   }, [undo, onSaved])
 
-  const chips = []
-  if (variable.shadowed) chips.push('被遮蔽 ' + String(variable.layerCount) + ' 层')
-  if (variable.forbidden) chips.push('禁止写入 .env')
-  if (variable.runtimeManaged) chips.push('运行时管理')
-  if (variable.sensitive) chips.push('shell 不可见')
+  // 次要信息拼成**一行注解**，跟在 VALUE 后面。不再用彩色胶囊：胶囊有边框、
+  // 有底色、有内边距，视觉重量和 KEY/VALUE 一样，几十行下来就是一片噪音。
+  const hidden = summary === undefined && effectiveLayer?.redacted === true
+  const lengthHint =
+    summary !== undefined && summary.truncated === true
+      ? `${String(summary.length)} 字符`
+      : hidden
+        ? `${String(effectiveLayer?.valueLength ?? 0)} 字符`
+        : null
 
-  const valueText = summary
-    ? summary.preview + (summary.truncated ? '  (' + String(summary.length) + ' 字符)' : '')
-    : effectiveLayer && effectiveLayer.redacted
-      ? '(已隐藏，' + String(effectiveLayer.valueLength) + ' 字符)'
-      : effectiveLayer && effectiveLayer.valueLength !== undefined
-        ? '(' + String(effectiveLayer.valueLength) + ' 字符)'
-        : ''
+  const meta = React.createElement(Meta, {
+    parts: [
+      LAYER_LABEL[variable.effective] ?? variable.effective ?? '?',
+      variable.shadowed === true ? `遮蔽 ${String(variable.layerCount ?? variable.layers.length)} 层` : null,
+      variable.sensitive === true ? 'shell 不可见' : null,
+      variable.forbidden === true ? '禁止写入 .env' : null,
+      lengthHint,
+    ],
+  })
+
+  // 值列：宿主不回传值时只回长度，这里用点阵 + 字符数如实表达"有值但看不到"
+  const valueText =
+    summary !== undefined
+      ? summary.preview
+      : hidden
+        ? null
+        : effectiveLayer?.valueLength !== undefined
+          ? `(${String(effectiveLayer.valueLength)} 字符)`
+          : null
+
+  const value = React.createElement(Value, {
+    masked: hidden,
+    title:
+      summary === undefined
+        ? hidden
+          ? '宿主从不回传密钥值'
+          : undefined
+        : `${summary.preview}${summary.truncated === true ? ` …（共 ${String(summary.length)} 字符）` : ''}`,
+    children: valueText,
+  })
+
+  // 行尾操作：只在悬停/聚焦时出现（见 client-ui.ts 里注入的那张样式表）
+  const rowActions = React.createElement(
+    RowActions,
+    null,
+    targetLayer === undefined || editing
+      ? null
+      : React.createElement(Button, {
+          variant: 'ghost',
+          size: 'sm',
+          icon: React.createElement(IconEditOutline16, null),
+          title: '编辑这一项',
+          'aria-label': '编辑',
+          disabled: busy,
+          onClick: beginEdit,
+        }),
+    variable.shadowed === true
+      ? React.createElement(Button, {
+          variant: 'ghost',
+          size: 'sm',
+          icon: React.createElement(IconChevronDownOutline14, null),
+          title: expanded ? '收起各层' : '展开各层',
+          'aria-label': expanded ? '收起各层' : '展开各层',
+          onClick: () => onToggle(variable.name),
+        })
+      : null,
+  )
 
   return React.createElement(
     'div',
-    { style: { display: 'flex', flexDirection: 'column', gap: '2px', padding: '3px 0' } },
+    { style: { paddingBottom: '1px' } },
     React.createElement(
-      'div',
-      { style: S.row },
-      React.createElement('code', { style: S.mono }, variable.name),
-      React.createElement('span', { style: S.chip }, LAYER_LABEL[variable.effective] || variable.effective || '?'),
-      chips.map((c) => React.createElement('span', { key: c, style: S.chip }, c)),
-      React.createElement('span', { style: { ...S.body, flex: 1, minWidth: '80px' } }, valueText),
-      targetLayer !== undefined && !editing
-        ? React.createElement(
-            'button',
-            { type: 'button', style: S.button, onClick: beginEdit, disabled: busy },
-            '编辑',
-          )
-        : null,
-      variable.shadowed
-        ? React.createElement(
-            'button',
-            { type: 'button', style: S.button, onClick: () => onToggle(variable.name) },
-            expanded ? '收起' : '展开各层',
-          )
-        : null,
+      Row,
+      { active: editing || expanded },
+      React.createElement(Key, { title: variable.name }, variable.name),
+      value,
+      React.createElement(
+        'span',
+        { style: { display: 'inline-flex', alignItems: 'baseline', gap: '8px' } },
+        meta,
+        rowActions,
+      ),
     ),
-    // `editing` 只可能由「编辑」按钮置为 true，而那个按钮只在 `targetLayer`
-    // 存在时才渲染 —— 但编译器推不出来。多带一个条件收窄，渲染结果不变。
+
+    // ── 就地编辑 ─────────────────────────────────────────────────────────
     editing && targetLayer !== undefined
       ? React.createElement(
           'div',
-          { style: { ...S.row, paddingLeft: '12px' } },
-          React.createElement('span', { style: S.muted }, '写入「' + (LAYER_LABEL[targetLayer.layer] || targetLayer.layer) + '」：'),
-          React.createElement('input', {
-            style: S.input,
+          { style: { display: 'flex', alignItems: 'center', gap: '6px', padding: '2px 8px 6px' } },
+          React.createElement(
+            'span',
+            { style: { ...T.meta, whiteSpace: 'nowrap' } },
+            `写入「${LAYER_LABEL[targetLayer.layer] ?? targetLayer.layer}」`,
+          ),
+          React.createElement(Input, {
             value: draft,
             autoFocus: true,
+            placeholder: '新值',
+            style: { flex: 1, fontFamily: MONO, fontSize: '12px' },
             onChange: (e: InputChangeEvent) => setDraft(e.target.value),
           }),
-          React.createElement('button', { type: 'button', style: S.button, onClick: save, disabled: busy }, busy ? '保存中…' : '保存'),
-          React.createElement('button', { type: 'button', style: S.button, onClick: () => setEditing(false), disabled: busy }, '取消'),
-          React.createElement('button', { type: 'button', style: S.button, onClick: remove, disabled: busy }, '删除'),
-          React.createElement('span', { style: S.muted }, LAYER_TIMING[targetLayer.layer] || ''),
-        )
-      : null,
-    error !== null ? React.createElement('p', { style: { ...S.warn, paddingLeft: '12px' } }, '保存失败：' + error) : null,
-    saved !== null ? React.createElement('p', { style: { ...S.okmsg, paddingLeft: '12px' } }, saved + '（' + (targetLayer === undefined ? '' : LAYER_TIMING[targetLayer.layer] || '') + '）') : null,
-    // 注册表删除没有回收站 —— 给一个撤销入口，或如实说明无法撤销
-    undo === 'unavailable'
-      ? React.createElement('p', { style: { ...S.muted, paddingLeft: '12px' } }, '已删除；宿主未能取得原值，无法撤销。')
-      : undo !== null
-        ? React.createElement(
-            'div',
-            { style: { ...S.row, paddingLeft: '12px' } },
-            React.createElement('span', { style: S.muted }, '已删除（原类型 ' + undo.type + '）'),
-            React.createElement('button', { type: 'button', style: S.button, onClick: undoRemove, disabled: busy }, busy ? '恢复中…' : '撤销删除'),
-          )
-        : null,
-    expanded
-      ? React.createElement(
-          'div',
-          { style: { display: 'flex', flexDirection: 'column', gap: '2px', paddingLeft: '12px' } },
-          variable.layers.map((layer, i) =>
-            React.createElement(
-              'div',
-              { key: String(i), style: S.muted },
-              (LAYER_LABEL[layer.layer] || layer.layer) +
-                '：' +
-                (layer.layer === variable.effective ? '【生效】' : '（被遮蔽）') +
-                (layer.writable ? ' 可写' : ' 不可写') +
-                ' ' +
-                (LAYER_TIMING[layer.layer] || '') +
-                (layer.registryType ? '  ' + layer.registryType : '') +
-                (layer.requiresElevation ? '  需管理员权限' : '') +
-                (layer.blockedCode ? '  — ' + reasonText(state, layer.blockedCode) : '') +
-                (layer.path ? '  ' + layer.path : ''),
-            ),
+          React.createElement(
+            Button,
+            { variant: 'outline', size: 'sm', disabled: busy, onClick: save },
+            busy ? '保存中' : '保存',
+          ),
+          React.createElement(
+            Button,
+            { variant: 'ghost', size: 'sm', disabled: busy, onClick: () => setEditing(false) },
+            '取消',
+          ),
+          React.createElement(Button, {
+            variant: 'ghost',
+            size: 'sm',
+            icon: React.createElement(IconTrashOutline16, null),
+            title: '删除这一项',
+            'aria-label': '删除',
+            disabled: busy,
+            onClick: remove,
+          }),
+          React.createElement(
+            'span',
+            { style: { ...T.meta, whiteSpace: 'nowrap' } },
+            LAYER_TIMING[targetLayer.layer] ?? '',
           ),
         )
       : null,
+
+    // ── 结果与撤销 ───────────────────────────────────────────────────────
+    error !== null ? React.createElement(Note, null, `保存失败：${error}`) : null,
+    saved !== null
+      ? React.createElement(
+          Note,
+          null,
+          `${saved}${targetLayer === undefined ? '' : `（${LAYER_TIMING[targetLayer.layer] ?? ''}）`}`,
+        )
+      : null,
+    undo === 'unavailable'
+      ? React.createElement(Note, null, '已删除；宿主未能取得原值，无法撤销。')
+      : undo !== null
+        ? React.createElement(
+            'div',
+            { style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '0 8px 4px' } },
+            React.createElement('span', { style: T.meta }, `已删除（原类型 ${undo.type}）`),
+            React.createElement(
+              Button,
+              { variant: 'ghost', size: 'sm', disabled: busy, onClick: undoRemove },
+              busy ? '恢复中' : '撤销删除',
+            ),
+          )
+        : null,
+
+    // ── 各层细节 ─────────────────────────────────────────────────────────
+    expanded
+      ? React.createElement(LayerDetail, {
+          rows: variable.layers.map((layer) => ({
+            name: LAYER_LABEL[layer.layer] ?? layer.layer,
+            facts: [
+              layer.layer === variable.effective ? '【生效】' : '（被遮蔽）',
+              layer.writable === true ? '可写' : '不可写',
+              LAYER_TIMING[layer.layer] ?? '',
+              layer.registryType ?? '',
+              layer.requiresElevation === true ? '需管理员权限' : '',
+              layer.blockedCode === undefined ? '' : `— ${reasonText(state, layer.blockedCode)}`,
+              layer.path ?? '',
+            ]
+              .filter((part) => part.length > 0)
+              .join('  '),
+          })),
+        })
+      : null,
   )
 }
-
 /**
  * 密钥面板。
  *
@@ -549,78 +615,103 @@ function CredentialPanel(props: CredentialPanelProps) {
   }, [editing, load, onSaved])
 
   if (names.length === 0) {
-    return React.createElement('p', { style: S.muted }, '未发现候选的密钥名（环境中没有 KEY/TOKEN/SECRET 形状的变量）。')
+    return React.createElement(Empty, null, '环境中没有 KEY / TOKEN / SECRET 形状的变量名')
   }
 
   return React.createElement(
-    'div',
-    { style: S.card },
-    React.createElement('p', { style: S.body }, '密钥（' + String(names.length) + ' 个候选名）'),
-    React.createElement(
-      'p',
-      { style: S.muted },
-      '宿主**从不回传密钥值**，所以这里只显示"是否已配置"。写入后立即对 DSH 内部生效（下一次模型请求即可用），' +
-        '但模型执行的 shell 读不到它 —— 那是有意的安全设计。',
-    ),
+    React.Fragment,
+    null,
+    React.createElement(GroupHeading, { title: '密钥', count: names.length }),
+    React.createElement(Note, null, '宿主**从不回传密钥值**，所以这里只表达"是否已配置"。写入后立即对 DSH 内部生效（下一次模型请求即可用），但模型执行的 shell 读不到它 —— 这是有意的安全设计。'),
     available === false
-      ? React.createElement('p', { style: S.muted }, '本 composition 未挂载凭据域，无法管理密钥。')
+      ? React.createElement(Note, null, '本 composition 未挂载凭据域，无法管理密钥。')
       : null,
-    error !== null ? React.createElement('p', { style: S.warn }, '读取失败：' + error) : null,
-    feedback !== null ? React.createElement('p', { style: S.okmsg }, feedback) : null,
+    error !== null ? React.createElement(Note, null, `读取失败：${error}`) : null,
+    feedback !== null ? React.createElement(Note, null, feedback) : null,
     status === null
-      ? React.createElement('p', { style: S.muted }, '正在读取密钥状态…')
+      ? React.createElement(Empty, null, '正在读取密钥状态…')
       : names.map((name) => {
-          const info = status[name] || { configured: false, editable: false }
+          const info = status[name] ?? { configured: false, editable: false }
+          const rowMeta = React.createElement(Meta, {
+            parts: [info.configured === true ? '已配置' : '未配置', info.sourceLabel, info.blockedReason],
+          })
           return React.createElement(
             'div',
-            { key: name, style: { display: 'flex', flexDirection: 'column', gap: '2px', padding: '3px 0' } },
+            { key: name },
             React.createElement(
-              'div',
-              { style: S.row },
-              React.createElement('code', { style: S.mono }, name),
+              Row,
+              { active: editing === name },
+              React.createElement(Key, { title: name }, name),
+              React.createElement(Value, {
+                masked: info.configured === true,
+                title: info.configured === true ? '宿主从不回传密钥值' : undefined,
+                children: info.configured === true ? null : '—',
+              }),
               React.createElement(
                 'span',
-                { style: S.chip },
-                info.configured ? '已配置' : '未配置',
+                { style: { display: 'inline-flex', alignItems: 'baseline', gap: '8px' } },
+                rowMeta,
+                React.createElement(
+                  RowActions,
+                  null,
+                  info.editable === true && editing !== name
+                    ? React.createElement(Button, {
+                        variant: 'ghost',
+                        size: 'sm',
+                        icon: React.createElement(IconEditOutline16, null),
+                        title: info.configured === true ? '替换密钥' : '设置密钥',
+                        'aria-label': info.configured === true ? '替换' : '设置',
+                        disabled: busy,
+                        onClick: () => {
+                          setEditing(name)
+                          setDraft('')
+                          setFeedback(null)
+                        },
+                      })
+                    : null,
+                ),
               ),
-              info.sourceLabel
-                ? React.createElement('span', { style: S.chip }, info.sourceLabel)
-                : null,
-              info.editable
-                ? React.createElement(
-                    'button',
-                    {
-                      type: 'button',
-                      style: S.button,
-                      disabled: busy,
-                      onClick: () => {
-                        setEditing(name)
-                        setDraft('')
-                        setFeedback(null)
-                      },
-                    },
-                    info.configured ? '替换' : '设置',
-                  )
-                : info.blockedReason
-                  ? React.createElement('span', { style: S.muted }, info.blockedReason)
-                  : null,
             ),
             editing === name
               ? React.createElement(
                   'div',
-                  { style: { ...S.row, paddingLeft: '12px' } },
-                  React.createElement('input', {
-                    style: S.input,
+                  { style: { display: 'flex', alignItems: 'center', gap: '6px', padding: '2px 8px 6px' } },
+                  React.createElement(Input, {
+                    style: { flex: 1, fontFamily: MONO, fontSize: '12px' },
                     type: 'password',
                     placeholder: '输入新值（不会回显已存值）',
                     value: draft,
                     autoFocus: true,
                     onChange: (e: InputChangeEvent) => setDraft(e.target.value),
                   }),
-                  React.createElement('button', { type: 'button', style: S.button, onClick: save, disabled: busy }, busy ? '保存中…' : '保存'),
-                  React.createElement('button', { type: 'button', style: S.button, onClick: () => { setEditing(null); setDraft('') }, disabled: busy }, '取消'),
-                  info.configured
-                    ? React.createElement('button', { type: 'button', style: S.button, onClick: remove, disabled: busy }, '删除')
+                  React.createElement(
+                    Button,
+                    { variant: 'outline', size: 'sm', disabled: busy, onClick: save },
+                    busy ? '保存中' : '保存',
+                  ),
+                  React.createElement(
+                    Button,
+                    {
+                      variant: 'ghost',
+                      size: 'sm',
+                      disabled: busy,
+                      onClick: () => {
+                        setEditing(null)
+                        setDraft('')
+                      },
+                    },
+                    '取消',
+                  ),
+                  info.configured === true
+                    ? React.createElement(Button, {
+                        variant: 'ghost',
+                        size: 'sm',
+                        icon: React.createElement(IconTrashOutline16, null),
+                        title: '删除密钥',
+                        'aria-label': '删除',
+                        disabled: busy,
+                        onClick: remove,
+                      })
                     : null,
                 )
               : null,
@@ -628,14 +719,14 @@ function CredentialPanel(props: CredentialPanelProps) {
         }),
   )
 }
-
 /** 页签主体。 */
-function EnvManagerTab() {
+function EnvManagerPanel() {
   const [state, setState] = useState<EnvState | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [filter, setFilter] = useState('')
+  const [notesOpen, setNotesOpen] = useState(false)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -663,36 +754,36 @@ function EnvManagerTab() {
     setExpanded((prev) => ({ ...prev, [name]: !prev[name] }))
   }, [])
 
+  // 三种状态都在模态框内部表达（原来是三个各自 return 的整屏）
   if (loading && state === null) {
-    return React.createElement('p', { style: S.body }, '正在读取环境…')
+    return React.createElement(Placeholder, null, '正在读取环境…')
   }
-
   if (error !== null) {
     return React.createElement(
-      'div',
-      { style: S.wrap },
-      React.createElement('p', { style: S.head }, '环境变量管理'),
-      React.createElement('p', { style: S.warn }, '读取失败：' + error),
-      React.createElement('p', { style: S.muted }, '宿主路由：' + STATE_URL + '（需要 DSH 已加载本插件）'),
-      React.createElement('button', { type: 'button', style: S.button, onClick: load }, '重试'),
+      React.Fragment,
+      null,
+      React.createElement(Placeholder, { tone: 'warn' }, `读取失败：${error}`),
+      React.createElement(Note, null, `宿主路由：${STATE_URL}（需要 DSH 已加载本插件）`),
+      React.createElement(
+        'div',
+        { style: { display: 'flex', justifyContent: 'center' } },
+        React.createElement(Button, { variant: 'outline', size: 'sm', onClick: load }, '重试'),
+      ),
     )
   }
-
-  // 上面两个分支都 `return` 了，所以走到这里 `state` 一定非空 —— `load()` 里
-  // 成功才 `setState`、失败必 `setError`，两者都配 `setLoading(false)`。
-  // 编译器看不到这层配对关系（`loading` 与 `state` 之间没有类型级不变量），
-  // 所以这里显式收窄一次。**不能**改成调整上面两个分支的顺序，那会改行为：
-  // 出错时 state 也是 null，先判 state 就会把错误页换成"正在读取环境…"。
+  // 上面两个分支都 return 了，且 `load()` 成功才 setState、失败必 setError，
+  // 所以走到这里 state 一定非空。编译器看不到这层配对，显式收一次窄；
+  // **不能**改成调整分支顺序 —— 出错时 state 也是 null。
   if (state === null) return null
 
-  const variables = state.variables || []
+  const variables = state.variables ?? []
   const needle = filter.trim().toUpperCase()
   const shown = needle.length === 0 ? variables : variables.filter((v) => v.name.toUpperCase().includes(needle))
 
   const groups = [
-    { key: 'runtime', title: '运行时 DSH_*（由插件注入，不来自环境）', items: shown.filter((v) => v.runtimeManaged) },
-    { key: 'shadowed', title: '多层竞争（同名变量存在于多个权威层）', items: shown.filter((v) => v.shadowed && !v.runtimeManaged) },
-    { key: 'plain', title: '单层变量', items: shown.filter((v) => !v.shadowed && !v.runtimeManaged) },
+    { key: 'runtime', title: '运行时 DSH_*', items: shown.filter((v) => v.runtimeManaged === true) },
+    { key: 'shadowed', title: '多层竞争', items: shown.filter((v) => v.shadowed === true && v.runtimeManaged !== true) },
+    { key: 'plain', title: '单层变量', items: shown.filter((v) => v.shadowed !== true && v.runtimeManaged !== true) },
   ]
 
   // 密钥候选：只挑凭据形状的名字（宿主会对每个候选逐个 describe）
@@ -701,104 +792,139 @@ function EnvManagerTab() {
     .map((v) => v.name)
     .sort()
 
+  const warnings = state.warnings ?? []
+
   return React.createElement(
-    'div',
-    { style: S.wrap },
-    React.createElement('p', { style: S.head }, '环境变量管理'),
+    React.Fragment,
+    null,
+
+    // ── 工具条 ───────────────────────────────────────────────────────────
     React.createElement(
-      'p',
-      { style: S.muted },
-      '工作目录 ' + state.cwd + '　·　home ' + state.home + '　·　共 ' + String(state.counts.total) + ' 项' +
-        (state.counts.shadowed > 0 ? '（' + String(state.counts.shadowed) + ' 项多层竞争）' : ''),
-    ),
-    React.createElement(
-      'p',
-      { style: S.muted },
-      '项目 .env：' + (state.files.project || '（不存在）') + '　·　用户 .env：' + (state.files.user || '（不存在）'),
-    ),
-    state.os
-      ? React.createElement(
-          'p',
-          { style: S.muted },
-          state.os.skipped === true
-            ? 'OS 环境层：本次请求已跳过（os=0）'
-            : state.os.supported === false
-              ? 'OS 环境层：当前平台不支持读写（Linux/macOS 没有单一可靠的写入点，见设计文档 §2）'
-              : 'OS 环境层：注册表·用户 ' +
-                String(state.os.scopes?.['os-user']?.count ?? 0) +
-                ' 项' +
-                (state.os.scopes?.['os-user']?.error ? '（读取失败：' + state.os.scopes['os-user'].error + '）' : '') +
-                '　·　注册表·系统 ' +
-                String(state.os.scopes?.['os-machine']?.count ?? 0) +
-                ' 项' +
-                (state.os.scopes?.['os-machine']?.error ? '（读取失败：' + state.os.scopes['os-machine'].error + '）' : ''),
-        )
-      : null,
-    // 解析诊断必须显示：带 BOM 的文件里第一个变量名对 DSH 而言与界面显示的不同
-    (state.warnings ?? []).map((w, i) =>
-      React.createElement(
-        'p',
-        { key: String(i), style: S.warn },
-        '⚠ ' + (w.path ? w.path + '：' : '') + (w.message || w.code),
-      ),
-    ),
-    React.createElement(
-      'div',
-      { style: S.row },
-      React.createElement('input', {
-        style: S.input,
-        placeholder: '按名称过滤…',
+      Toolbar,
+      null,
+      React.createElement(Input, {
+        icon: React.createElement(IconSearchOutline16, null),
+        placeholder: '按名称过滤',
         value: filter,
+        style: { flex: 1, fontSize: '12px' },
         onChange: (e: InputChangeEvent) => setFilter(e.target.value),
       }),
-      React.createElement('button', { type: 'button', style: S.button, onClick: load }, '刷新'),
+      React.createElement(Button, {
+        variant: 'ghost',
+        size: 'sm',
+        icon: React.createElement(IconRefreshOutline16, null),
+        title: '重新读取',
+        'aria-label': '刷新',
+        onClick: load,
+      }),
+      React.createElement(
+        'span',
+        { style: { ...T.meta, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' } },
+        needle.length === 0 ? String(variables.length) : `${String(shown.length)} / ${String(variables.length)}`,
+      ),
     ),
-    groups.map((group) =>
-      group.items.length === 0
-        ? null
-        : React.createElement(
-            'div',
-            { key: group.key, style: S.card },
-            React.createElement('p', { style: S.body }, group.title + '（' + String(group.items.length) + '）'),
-            group.items
-              .slice(0, 40)
-              .map((v) =>
-                React.createElement(VariableRow, {
-                  key: v.name,
-                  variable: v,
-                  state,
-                  expanded: expanded[v.name] === true,
-                  onToggle: toggle,
-                  onSaved: load,
-                }),
-              ),
-            group.items.length > 40
-              ? React.createElement('p', { style: S.muted }, '另有 ' + String(group.items.length - 40) + ' 项，请用过滤框缩小范围')
-              : null,
-          ),
+
+    // 解析诊断必须显示：带 BOM 的文件里第一个变量名对 DSH 而言与界面显示的不同
+    warnings.map((w, i) =>
+      React.createElement(
+        Note,
+        { key: `w${String(i)}` },
+        `⚠ ${w.path === undefined ? '' : `${w.path}：`}${w.message ?? w.code ?? ''}`,
+      ),
     ),
-    React.createElement(CredentialPanel, { names: credentialNames, onSaved: load }),
+
+    // ── 变量列表（只让这块滚动）───────────────────────────────────────────
     React.createElement(
-      'p',
-      { style: S.muted },
-      '说明：标记为「shell 不可见」的名字会被子进程清洗（/KEY|PASSWORD|SECRET|TOKEN/i），' +
-        '所以模型执行的命令读不到它们 —— 这是「仅 DSH 内部可用」的密钥。',
+      ScrollArea,
+      null,
+      groups.map((group) =>
+        group.items.length === 0
+          ? null
+          : React.createElement(
+              React.Fragment,
+              { key: group.key },
+              React.createElement(GroupHeading, { title: group.title, count: group.items.length }),
+              group.items
+                .slice(0, 40)
+                .map((v) =>
+                  React.createElement(VariableRow, {
+                    key: v.name,
+                    variable: v,
+                    state,
+                    expanded: expanded[v.name] === true,
+                    onToggle: toggle,
+                    onSaved: load,
+                  }),
+                ),
+              group.items.length > 40
+                ? React.createElement(
+                    Note,
+                    null,
+                    `另有 ${String(group.items.length - 40)} 项，请用过滤框缩小范围`,
+                  )
+                : null,
+            ),
+      ),
+      React.createElement(CredentialPanel, { names: credentialNames, onSaved: load }),
+      shown.length === 0 ? React.createElement(Empty, null, `没有名字匹配「${filter}」`) : null,
     ),
+
+    // ── 说明：默认收起。原文案是三段常驻长文，把 KEY/VALUE 挤到了屏幕外 ──
     React.createElement(
-      'p',
-      { style: S.muted },
-      '说明：注册表层的改动在 DSH 重启前**不会改变生效值** —— 注册表的值在启动时已被继承进「启动环境」，' +
-        '而它的优先级更高。展开被遮蔽的多层变量即可看到这种竞争。',
-    ),
-    React.createElement(
-      'p',
-      { style: S.muted },
-      '说明：写入 .env 使用「读取 revision → 带栅栏写入」的乐观并发；' +
-        '若期间文件被其他程序改动，保存会被拒绝而不会覆盖对方的改动。',
+      DisclosureRow,
+      {
+        title: '说明与生效时机',
+        open: notesOpen,
+        expandable: true,
+        onToggle: () => setNotesOpen(!notesOpen),
+      },
+      React.createElement(
+        'div',
+        { style: { paddingBottom: '4px' } },
+        React.createElement(
+          Note,
+          null,
+          `工作目录 ${state.cwd}　·　home ${state.home}　·　共 ${String(state.counts.total)} 项` +
+            (state.counts.shadowed > 0 ? `（${String(state.counts.shadowed)} 项多层竞争）` : ''),
+        ),
+        React.createElement(
+          Note,
+          null,
+          `项目 .env：${state.files.project ?? '（不存在）'}　·　用户 .env：${state.files.user ?? '（不存在）'}`,
+        ),
+        state.os === undefined
+          ? null
+          : React.createElement(
+              Note,
+              null,
+              state.os.skipped === true
+                ? 'OS 环境层：本次请求已跳过（os=0）'
+                : state.os.supported === false
+                  ? 'OS 环境层：当前平台不支持读写（Linux/macOS 没有单一可靠的写入点，见设计文档 §2）'
+                  : `OS 环境层：注册表·用户 ${String(state.os.scopes?.['os-user']?.count ?? 0)} 项` +
+                    (state.os.scopes?.['os-user']?.error ? `（读取失败：${state.os.scopes['os-user']?.error ?? ''}）` : '') +
+                    `　·　注册表·系统 ${String(state.os.scopes?.['os-machine']?.count ?? 0)} 项` +
+                    (state.os.scopes?.['os-machine']?.error ? `（读取失败：${state.os.scopes['os-machine']?.error ?? ''}）` : ''),
+            ),
+        React.createElement(
+          Note,
+          null,
+          '标记为「shell 不可见」的名字会被子进程清洗（/KEY|PASSWORD|SECRET|TOKEN/i），所以模型执行的命令读不到它们 —— 这是「仅 DSH 内部可用」的密钥。',
+        ),
+        React.createElement(
+          Note,
+          null,
+          '注册表层的改动在 DSH 重启前**不会改变生效值** —— 注册表的值在启动时已被继承进「启动环境」，而它的优先级更高。展开被遮蔽的多层变量即可看到这种竞争。',
+        ),
+        React.createElement(
+          Note,
+          null,
+          '写入 .env 使用「读取 revision → 带栅栏写入」的乐观并发；若期间文件被其他程序改动，保存会被拒绝而不会覆盖对方的改动。',
+        ),
+      ),
     ),
   )
 }
-
 /**
  * 本插件依赖的 cordis 服务（**浏览器侧的 fiber inject**）。
  *
@@ -824,6 +950,61 @@ function EnvManagerTab() {
 const inject = ['slots']
 
 /**
+ * 入口图标。
+ *
+ * `IconContextInjectionOutline16` —— 本插件做的事就是往 DSH 的上下文里注入变量，
+ * 语义对得上，尺寸与 header 里其它图标一致。想换只改这一行，候选：
+ * `IconDataOutline16`（层叠的数据）、`IconDatabaseOutline16`（分层存储）、
+ * `IconSettingsOutline16`。
+ */
+const ENTRY_ICON = IconContextInjectionOutline16
+
+/**
+ * 模态框：把面板挂在 body 上的 portal，由 `Modal` 自己处理遮罩、Esc、焦点。
+ *
+ * 只在打开时才渲染 —— `Modal` 在 `open === false` 时返回 null，所以关闭状态下
+ * 一次 `fetch` 都不会发。
+ */
+function EnvManagerDialog(props: { open: boolean; onClose: () => void }) {
+  return React.createElement(
+    Modal,
+    {
+      open: props.open,
+      onClose: props.onClose,
+      title: '环境变量',
+      closeLabel: '关闭',
+      description: 'KEY=VALUE 的复合视图：谁在生效、在哪一层、能不能改。',
+      className: 'dsh-envmgr-dialog',
+    },
+    React.createElement(EnvManagerPanel),
+  )
+}
+
+/**
+ * 会话头部（`conversation.session.header.utilities`）里的入口。
+ *
+ * 为什么放在这里而不是 Settings → Plugins：环境变量是**每次会话都要看**的东西
+ * （"这个变量到底生效了吗"），而 Settings 是配置一次就不再打开的页面。
+ * 头部图标点开即成模态，不离开当前对话。
+ */
+function EnvManagerAction() {
+  const [open, setOpen] = useState(false)
+  return React.createElement(
+    React.Fragment,
+    null,
+    React.createElement(Button, {
+      variant: 'ghost',
+      size: 'sm',
+      icon: React.createElement(ENTRY_ICON, null),
+      title: '环境变量',
+      'aria-label': '环境变量',
+      onClick: () => setOpen(true),
+    }),
+    React.createElement(EnvManagerDialog, { open, onClose: () => setOpen(false) }),
+  )
+}
+
+/**
  * 载入客户端插件。
  *
  * `ctx` 只声明**用到的**那一小块（`slots.inject` / `slots.register`）：
@@ -836,30 +1017,32 @@ const inject = ['slots']
 function apply(ctx: {
   slots: {
     inject: (name: string, callback: () => void) => void
-    register: (options: { name: string; id: string; order: number; label: string }, component: () => unknown) => unknown
+    register: (options: Record<string, unknown>, component: () => unknown) => unknown
   }
 }) {
-  // `slots.inject` 等待槽位被声明后再注册：`settings.plugins.tab` 由拥有
-  // Plugins 分区的插件在运行时声明，注册早于声明会被丢弃。
-  ctx.slots.inject('settings.plugins.tab', () =>
+  installClientStyles()
+
+  // 注册进**会话头部的右侧工具区**（`conversation.session.header.utilities`）。
+  // 它是 `list` 槽位，与「在应用中打开」「后台任务」等图标并排。
+  // `slots.inject` 等待槽位被声明后再注册：注册早于声明会被丢弃。
+  ctx.slots.inject('conversation.session.header.utilities', () =>
     ctx.slots.register(
       {
-        name: 'settings.plugins.tab',
+        name: 'conversation.session.header.utilities',
         id: 'env-manager',
         order: 100,
-        label: '环境变量',
       },
-      EnvManagerTab,
+      EnvManagerAction,
     ),
   )
 }
 
 /**
- * 导出面：`apply` / `inject` / `EnvManagerTab`。
+ * 导出面：`apply` / `inject` / `EnvManagerAction` / `EnvManagerPanel`。
  *
  * `inject` 必须与 `apply` 一起**具名导出在同一个模块上** —— 客户端 runner 把
  * materialize 出的 `module.exports` 交给 `ctx.plugin()`，而 cordis 用
  * `Inject.resolve(plugin.inject)` 建 fiber。第一方产物的结尾同样是
  * `exports.apply = apply; exports.inject = inject;`（如 `dsh-client-ui-goal`）。
  */
-export { apply, inject, EnvManagerTab }
+export { apply, inject, EnvManagerAction, EnvManagerPanel }

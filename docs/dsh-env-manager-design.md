@@ -2366,12 +2366,143 @@ next[i] = { kind: 'entry', raw: content + eol, content, key: seg.key, value }
 工具调用以重建文件"这套方法（本次抢修重放了 11 次 `write` + 89 次 `edit`，5 处
 重放失败靠手工补齐）。它们指向的 `lib/*.mjs` 已不存在，是迁移前的考古工具。
 
-### 31.6 客户端半边为什么留一份"旧实现"
+### 31.6 客户端半边的"旧实现"与那道门禁的下场
 
-`src/client.legacy.js`（31 KB，迁移时冻结的手写 bundle）**不删**。
-`verify-client-parity.mjs` 每次运行都要拿它当参照物 —— 有它，"新构建与旧行为一致"
-才是一个每次都能重跑的结论，而不是"当时看过觉得一样"。它在 `tsconfig.json`
-里被 exclude（是 `.js`，`allowJs` 关着），不会被类型检查或构建碰到。
+迁移期留了一份冻结的手写 bundle（`src/client.legacy.js`），`verify-client-parity.mjs`
+每次运行都拿它当参照物 —— 有它，"新构建与旧行为一致"才是一个能反复重跑的结论，
+而不是"当时看过觉得一样"。
+
+**两者都在 §32 的重设计里退役了**：入口从 Settings 页签挪到会话头部、排版整体重做，
+这是**有意的行为变更**，而那道门禁的前提恰恰是"没有行为变更"。这类改动只能靠绝对
+断言，靠比对会一路绿灯。所以 `client.legacy.js` 与 `verify-client-parity.mjs` 都已
+删除（历史在 git 里），取而代之的是 `verify-client-ui.mjs`（见 §32.6）。
+
+---
+
+## 32. P20：入口搬到会话头部，并按"KEY/VALUE 优先"重排（2026-09-27）
+
+### 32.1 两个诉求
+
+1. **入口不在 Settings 里。** 原实现注册进 `settings.plugins.tab`，要经过
+   Settings → Plugins 两层才看到。而"这个变量到底生效了吗"是**每次会话**都会问的
+   问题，Settings 是配置一次就不再打开的页面 —— 放错了位置。
+2. **界面太丑。** 具体机制是：每一类信息都自带一套字号 + 边框 + 颜色（彩色胶囊、
+   每行卡片、常驻按钮），于是**注解和内容一样重**，竖着扫不下来。
+
+### 32.2 入口：`conversation.session.header.utilities`
+
+槽位是从**实测的类型声明**里找出来的，不是猜的。`dsh-client-ui-conversation` 的
+`contract/slots.d.ts` 声明：
+
+```
+'conversation.session.header.actions'   : { kind: 'list',   scope: 'session' }
+'conversation.session.header.utilities' : { kind: 'list',   scope: 'session' }   ← 用它
+'conversation.session.header.corner'    : { kind: 'single', scope: 'session' }
+```
+
+`utilities` 是"右对齐的会话工具区"，与「在应用中打开」「后台任务」并排 —— 正是
+用户圈出来的那块。`corner` 只收一个占用者（要给别的插件留着），`actions` 贴标题，
+不是右侧。
+
+注册写法照第一方（`dsh-session-log-export` 注册进同一个槽位）：
+
+```ts
+ctx.slots.inject('conversation.session.header.utilities', () =>
+  ctx.slots.register(
+    { name: 'conversation.session.header.utilities', id: 'env-manager', order: 100 },
+    EnvManagerAction,
+  ),
+)
+```
+
+`settings.plugins.tab` 的注册是**删除**，不是隐藏 —— 一个入口只应存在一处。
+
+### 32.3 顺手拿到的：DSH 自己的设计系统
+
+排查槽位时发现了前端 shell 的**解析种子表**（`dsh-web-frontend` 里被打包的
+`function by(){return{…}}`）：
+
+```
+react · react/jsx-runtime · react-dom · react-dom/client · @deepseek-ai/cordis ·
+@deepseek-ai/dsh-client-store · @deepseek-ai/dsh-client-ui-slots ·
+@deepseek-ai/dsh-client-ui-primitives · @deepseek-ai/dsh-client-ui-dockkit
+```
+
+`@deepseek-ai/dsh-client-ui-primitives` **不在磁盘的 node_modules 里**（38 个第一方
+客户端 bundle require 它），它就是 DSH 的设计系统：`Button` / `Input` / `Modal` /
+`Pill` / `Tag` / `StateDot` / `DisclosureRow` …（159 个导出，含 90 多个图标）。
+
+于是按钮、输入框、模态框、图标全部用 DSH 自己的组件 —— 明暗主题、圆角、间距、
+`--dsw-alias-*` 语义色自动一致。这比自己手搓一套按钮既便宜又好看，也是"不丑"的
+根本原因：**它的视觉语言与用户正在看的界面本来就是同一套**。
+
+props 都是**从被打包的实现里读出来的**，不靠名字猜（磁盘上没有这个包的类型）：
+
+| 组件 | 实测签名 |
+|---|---|
+| `Button` | `{variant='ghost', size='md', icon, className, children, ...rest}` → `<button>`；实际用到的 variant：`outline` / `primary` / `ghost` |
+| `Input` | `{icon, className, ...rest}` → rest 落到 `<input>` |
+| `Modal` | `{open, onClose, title, closeLabel, description, children, footer, …}`；`createPortal` 到 `document.body`，Esc 与遮罩点击都关，`open=false` 时返回 `null` |
+| `DisclosureRow` | `{icon, title, open, expandable, onToggle, …}` —— `open` 由调用方持有 |
+
+`src/primitives.d.ts` 只声明用到的成员，并在文件头记下每个签名的**来源**。
+
+### 32.4 排版：内容与注解分开
+
+| 层 | 字号 / 权重 | 处理 |
+|---|---|---|
+| KEY | 12.5px 等宽 / 560 | 内容。`minmax(120px, 24%)` 一列，溢出省略 |
+| VALUE | 12.5px 等宽 / 400 / opacity .74 | 内容。占满剩余宽度；隐藏值用 `••••••••••` |
+| 注解 | 11px / opacity .42 | 生效层 · 遮蔽层数 · shell 不可见 · 禁止写入 · 字符数，`·` 串成一行 |
+| 各层细节 | 11.5px / opacity .5 | 展开时出现，左侧一条细竖线表示从属 |
+| 分组标题 | 11px / opacity .5 | 小字 + 一条细横线 + 计数 |
+
+具体动作：
+
+- **彩色胶囊全部删掉** —— 它们是"注解和内容一样重"的主要来源。
+- **每行卡片删掉**，改为整行悬停底色 + 圆角，不再有几十个盒子切断竖向扫描。
+- **每行常驻的三个按钮改成悬停出现的图标按钮**（编辑 / 展开各层 / 删除）；
+  键盘落进该行（`:focus-within`）时同样出现，触屏媒体查询下常驻。
+- **三段常驻长说明收进一个 `DisclosureRow`（默认收起）** —— 它们原来把
+  KEY/VALUE 挤到了屏幕外。
+- **密钥面板复用同一套行**，值列恒为点阵 + 「已配置 / 未配置」，因为宿主从不回传值。
+
+`:hover` / `:focus-within` 内联样式表达不了，所以注入一张**极小样式表**（4 条规则，
+`installClientStyles()` 幂等挂载）。为几个悬停态引入 CSS 工具链不值得。
+
+### 32.5 结构：表现层独立成 `src/client-ui.ts`
+
+原 `client.ts` 里内联了 40 多个 style 片段，正文被样式淹没。现在：
+
+- `src/client-ui.ts` —— 只有排版与样式，不认识 `fetch`、不持有状态；
+- `src/client.ts` —— 数据流 + 组合 + 槽位注册。
+
+重排的做法本身也值得记：数据流（`postJson`、`save`/`remove`/`undoRemove`/`load`、
+各组状态）**一个字都没动**，只替换 createElement 树与样式。这不是靠"小心一点"，
+而是靠一个按锚点切段的脚本 —— 每个锚点必须恰好命中一次，否则整体中止；改完再逐块
+比对"改动前后是否逐字相同"，并统计逻辑关键字（`await postJson`、`setBusy(` …）的出现
+次数。**"逻辑没被改动"是脚本的断言，不是我的记忆。**
+
+### 32.6 验证方式也跟着换了
+
+`verify-client-ui.mjs`（63 项）把构建产物真的跑起来（假 `__ModuleLoader__`、假
+`react`、假 primitives、假 `fetch`、迷你渲染器），断言**可度量**的东西：
+
+- 行为：注册进 `conversation.session.header.utilities`、**不再**注册 Settings 页签；
+  `.env` set/unset 的请求体逐字节正确（含 CAS 的 `expectedRevision`）、注册表删除 +
+  撤销、凭据 set；被拒 / 500 / 永不 resolve 三条分支。
+- 排版：KEY/VALUE 字号 **大于** 注解、注解 `opacity ≤ 0.5`、注解没有边框（不是胶囊）、
+  KEY 在 VALUE 之前且 VALUE 文本正确、密文不外泄且为点阵、长说明默认收起。
+
+写这道门禁时踩的三个坑（本质都是"测的不是真组件"）：
+
+1. **假 `createElement` 必须像真 React 一样把子节点写进 `props.children`** ——
+   否则每个读 `props.children` 的组件都拿到 `undefined`，第一版因此拿到 0 行。
+2. **而且不能在"没有子节点参数"时覆盖 `props.children`** ——
+   `createElement(Value, { children: text })` 是真 React 允许的写法，被"顺手覆盖成
+   undefined"之后 VALUE 列变成空字符串。
+3. **函数型节点必须被调用才算渲染** —— 只在主机元素上遍历，会漏掉所有通过组件
+   渲染出来的按钮。
 
 ---
 

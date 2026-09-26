@@ -20,7 +20,7 @@ dsh --profile web --dump-config
 dsh web
 ```
 
-重启后在 **Settings → Plugins → 环境变量** 打开。
+重启后点**会话头部右上角的图标**（在「在应用中打开」「后台任务」旁边）打开。
 
 ---
 
@@ -37,17 +37,18 @@ dsh web
 | `src/registry.ts` → `lib/registry.js` | Windows 注册表 OS 层 | 保留 `REG_EXPAND_SZ`；删除前备份原值以支持撤销；非 Windows 诚实拒绝 |
 | `src/host-api.ts` → `lib/host-api.js` | 读路由 + 客户端数据投影 | 长值摘要化；**敏感名只回长度**；错误结构化 |
 | `src/write-routes.ts` → `lib/write-routes.js` | 写路由 + 请求策略闸门 | **路径由层标识推导，不接受任意路径**；复用 `connection.requestRejection` |
-| `src/client.ts` → `lib/client.js` | 客户端页签 | 普通 ESM 源码；`build/client-wrapper.mjs` 在构建后把它包成惰性 CJS 工厂（`window.__ModuleLoader__.load`），**产物里只允许 `require("react")`** |
+| `src/client.ts` → `lib/client.js` | 客户端入口与数据流 | 注册进**会话头部工具区** `conversation.session.header.utilities`，点开是模态框；普通 ESM 源码，`build/client-wrapper.mjs` 在构建后把它包成惰性 CJS 工厂（`window.__ModuleLoader__.load`）。**产物里只允许种子表内的说明符**：`react` 与 `@deepseek-ai/dsh-client-ui-primitives` |
+| `src/client-ui.ts` | 客户端表现层 | 只有排版与样式，不认识 `fetch`；KEY/VALUE 是内容、其余是注解。被 `client.ts` 内联进同一个 bundle |
 
 ---
 
 ## 验证
 
-### 测试套件（10 个可运行文件，1052 项断言）
+### 测试套件（10 个可运行文件，949 项断言）
 
 ```powershell
 pnpm run build                    # 套件测的是 lib/*.js，所以先构建
-node check-p0.mjs                 # 插件形态 + 客户端 bundle（36）
+node check-p0.mjs                 # 插件形态 + 客户端 bundle 契约（39）
 node verify-env-model.mjs         # 复合模型、差分测试、禁止名单保真（192）
 node verify-env-write.mjs         # 结构保留、CAS、并发、BOM（115）
 node verify-credentials.mjs       # 密钥零泄露与遮蔽分类（52）
@@ -56,18 +57,26 @@ node verify-registry.mjs          # 注册表解析、类型保留、并入模�
 node verify-registry-roundtrip.mjs # 真写 HKCU 再清理的往返（24）
 node verify-write-routes.mjs      # 写路由、路径白名单、请求闸门（93）
 node audit-hostile-input.mjs      # 敌意输入审计：畸形请求不崩、不泄露（192）
-node verify-client-parity.mjs     # 客户端半边运行时等价：真渲染 + 真点按钮（169）
+node verify-client-ui.mjs         # 客户端 UI：入口位置、排版层级、交互与请求体（63）
 
 node verify-build-parity.mjs      # 迁移期门禁：旧 lib/*.mjs 与新构建的逐模块等价（已退役）
 node audit-coverage.mjs           # 导出符号覆盖审计（应为 53/53）
 node audit-readme.mjs             # 校验本 README 的断言数与实测一致
 ```
 
-`verify-client-parity.mjs` 值得单独说明：它把旧的手写 bundle（`src/client.legacy.js`，
-迁移时冻结的参照物）和新构建的 `lib/client.js` **都真的跑起来** —— 迷你渲染器 + 假
-`fetch`，把两个 bundle 各驱动 25 遍（5 种响应模式 × 若干交互脚本），逐步比对渲染树
-快照与 fetch 序列。脚本按**按钮标签**驱动，覆盖了 `.env` 写/删、注册表写/删/撤销/无备份、
-凭据写/删、被拒分支、错误分支与"正在读取…"分支。它不是文本 diff，"看着一样"不算数。
+`verify-client-ui.mjs` 值得单独说明：它把构建出的 `lib/client.js` **真的跑起来** ——
+受控的 `window.__ModuleLoader__`、假 `react`、假 `@deepseek-ai/dsh-client-ui-primitives`、
+假 `fetch`，加一个只实现 4 个 hook 的迷你渲染器。然后点开入口、驱动交互，断言两类东西：
+
+- **行为**：入口注册进 `conversation.session.header.utilities`（**不是** Settings 页签）、
+  写请求的 URL 与请求体逐字节正确（`.env` 带 CAS 的 set/unset、注册表删除 + 撤销、
+  凭据 set），以及被拒 / 500 / 永不 resolve 三条分支。
+- **排版**：KEY/VALUE 是内容、其余是注解 —— 用**可度量**的方式断言：KEY/VALUE 字号
+  大于注解、注解 `opacity ≤ 0.5`、注解没有边框（不是胶囊）、KEY 在 VALUE 之前、
+  密文不外泄且以点阵表示、长说明默认收起。
+
+脚本按**按钮标签或 `aria-label`** 驱动（图标按钮没有文本），所以它顺带钉住了
+无障碍名字。
 
 ### 重启前预检
 
@@ -104,7 +113,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\post-restart-probe.ps1
 
 最后检查无残留。它**只依赖 HTTP**，所以能在重启后的新会话里直接跑。
 
-剩下唯一需要人眼的事：打开 **Settings → Plugins**，确认出现「环境变量」页签。
+剩下唯一需要人眼的事：确认**会话头部右上角**出现环境变量图标，点开是模态框。
 
 另外 `verify-registry-roundtrip.mjs`（24 项）**会真的改系统** —— 它往
 `HKCU\Environment` 写一个自建变量名做 写→删→撤销 往返（`finally` 无条件清理）。

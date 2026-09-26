@@ -170,10 +170,20 @@ console.log('\n=== 5. 客户端 bundle ===')
   // 物化工厂，检查 require 清单
   const required = []
   let registered
+  /**
+   * 允许 `require()` 的说明符 = **前端 shell 的解析种子表**（实测自
+   * `dsh-web-frontend/dist/assets/index-*.js` 里的 `function by(){return{…}}`）
+   * 与本 bundle 用到的子集。表外的说明符在真浏览器里会直接抛错，所以这里
+   * 也必须拒绝 —— 这个沙箱的价值就在于复现那条边界。
+   */
+  const SEEDED = ['react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', '@deepseek-ai/dsh-client-ui-primitives']
+  const stub = () => null
   const sandbox = {
     window: { __ModuleLoader__: { load: (r) => { registered = r } } },
+    document: undefined,
     require: (spec) => {
       required.push(spec)
+      if (!SEEDED.includes(spec)) throw new Error(`unknown module: ${spec}`)
       if (spec === 'react') {
         return {
           createElement: () => ({}),
@@ -183,7 +193,19 @@ console.log('\n=== 5. 客户端 bundle ===')
           useCallback: (f) => f,
         }
       }
-      throw new Error(`unknown module: ${spec}`)
+      // primitives：只把用到的成员降级成不渲染的空实现
+      return {
+        Button: stub,
+        Input: stub,
+        Modal: stub,
+        DisclosureRow: stub,
+        IconChevronDownOutline14: stub,
+        IconContextInjectionOutline16: stub,
+        IconEditOutline16: stub,
+        IconRefreshOutline16: stub,
+        IconSearchOutline16: stub,
+        IconTrashOutline16: stub,
+      }
     },
   }
   const { createContext, runInContext } = await import('node:vm')
@@ -194,7 +216,16 @@ console.log('\n=== 5. 客户端 bundle ===')
     if (typeof registered?.factory === 'function') {
       const exportsObj = registered.factory(sandbox.require)
       ok('factory materializes and exports apply()', typeof exportsObj.apply === 'function')
-      ok('only react is required', required.every((r) => r === 'react'), required.join(','))
+      ok(
+        'only seeded modules are required',
+        required.every((r) => SEEDED.includes(r)),
+        required.join(','),
+      )
+      ok(
+        'the ui-primitives platform seed is used (DSH design system)',
+        required.includes('@deepseek-ai/dsh-client-ui-primitives'),
+        required.join(','),
+      )
     }
   } catch (error) {
     ok('client bundle executes in a browser-like sandbox', false, String(error?.message ?? error))

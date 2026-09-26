@@ -19,7 +19,7 @@
     "build": "tsdown",
     "watch": "tsdown --watch",
     "typecheck": "tsc --noEmit",
-    "test": "pnpm run build && node check-p0.mjs && node verify-env-model.mjs && node verify-env-write.mjs && node verify-credentials.mjs && node verify-host-api.mjs && node verify-registry.mjs && node verify-registry-roundtrip.mjs && node verify-write-routes.mjs && node audit-hostile-input.mjs && node verify-client-parity.mjs",
+    "test": "pnpm run build && node check-p0.mjs && node verify-env-model.mjs && node verify-env-write.mjs && node verify-credentials.mjs && node verify-host-api.mjs && node verify-registry.mjs && node verify-registry-roundtrip.mjs && node verify-write-routes.mjs && node audit-hostile-input.mjs && node verify-client-ui.mjs",
     "test:parity": "node verify-build-parity.mjs",
     "preflight": "node preflight.mjs"
   },

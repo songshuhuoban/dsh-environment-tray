@@ -65,14 +65,28 @@ export default defineConfig([
     clean: false,
     sourcemap: false,
     deps: {
-      // 必须保留为 require() —— 见文件头的说明
-      neverBundle: ['react', 'react/jsx-runtime'],
+      /**
+       * 必须保留为 `require()` —— 见文件头的说明。
+       *
+       * `@deepseek-ai/dsh-client-ui-primitives` 是**平台种子**：它不在磁盘上的
+       * node_modules 里，而由前端 shell 直接提供。实测自 `dsh-web-frontend` 的
+       * 种子表（`function by(){return{…}}`）：
+       *   react / react/jsx-runtime / react-dom / react-dom/client /
+       *   @deepseek-ai/cordis / @deepseek-ai/dsh-client-store /
+       *   @deepseek-ai/dsh-client-ui-slots /
+       *   @deepseek-ai/dsh-client-ui-primitives /
+       *   @deepseek-ai/dsh-client-ui-dockkit
+       * 第一方客户端 bundle 里有 38 个 require 它，所以用它就能与 DSH 自己的
+       * 设计系统（Button / Input / Modal / Pill / 图标 …）保持一致 ——
+       * 比自己造一套按钮既便宜又好看。
+       */
+      neverBundle: ['react', 'react/jsx-runtime', '@deepseek-ai/dsh-client-ui-primitives'],
     },
     plugins: [
       clientBundleWrapper({
         id: 'dsh-env-manager',
         chunk: 'client.js',
-        external: ['react', 'react/jsx-runtime'],
+        external: ['react', 'react/jsx-runtime', '@deepseek-ai/dsh-client-ui-primitives'],
       }),
     ],
   },
