@@ -24,6 +24,12 @@ console.log(`README 解析到 ${String(declared.size)} 条断言数声明\n`)
 
 let mismatches = 0
 let total = 0
+// These comparisons run only when the developer's installed DSH reference files
+// are available. A clean release runner still exercises every other assertion.
+const optionalReferences = new Map([
+  ['check-p0.mjs', { count: 3, marker: 'SKIP  找不到第一方参照包' }],
+  ['verify-env-model.mjs', { count: 8, marker: 'SKIP  DSH 源码不在预期路径' }],
+])
 
 for (const [file, claimed] of [...declared].sort((a, b) => a[0].localeCompare(b[0]))) {
   if (!existsSync(file)) {
@@ -33,19 +39,24 @@ for (const [file, claimed] of [...declared].sort((a, b) => a[0].localeCompare(b[
   }
 
   let output
+  let exitedWithError = false
   try {
     output = execFileSync(process.execPath, [file], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
   } catch (error) {
     // 非零退出也算失败，但先把输出拿到手
+    exitedWithError = true
     output = `${error.stdout ?? ''}${error.stderr ?? ''}`
   }
 
   const actual = (output.match(/^(?:PASS|FAIL)/gm) ?? []).length
   const failed = (output.match(/^FAIL/gm) ?? []).length
-  total += actual
-  const okCount = claimed === actual && failed === 0
+  const optional = optionalReferences.get(file)
+  const skipped = optional && output.includes(optional.marker) ? optional.count : 0
+  const accounted = actual + skipped
+  total += accounted
+  const okCount = claimed === accounted && failed === 0 && !exitedWithError
   if (!okCount) mismatches += 1
-  console.log(`  ${okCount ? 'OK      ' : 'MISMATCH'}  ${file.padEnd(32)} README=${String(claimed).padEnd(4)} actual=${String(actual).padEnd(4)} fail=${String(failed)}`)
+  console.log(`  ${okCount ? 'OK      ' : 'MISMATCH'}  ${file.padEnd(32)} README=${String(claimed).padEnd(4)} actual=${String(actual).padEnd(4)} skipped=${String(skipped).padEnd(2)} fail=${String(failed)}${exitedWithError ? ' exit=nonzero' : ''}`)
 }
 
 // 总断言数
