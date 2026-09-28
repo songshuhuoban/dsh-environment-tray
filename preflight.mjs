@@ -269,7 +269,7 @@ console.log('\n=== 6. 组合配置里我们的行 ===')
         }
       }
       info('our row', idLine.trim())
-      ok('our row has the expected id', idLine.includes('env-manager'), idLine.trim())
+      ok('our row has the expected id', idLine.includes('dsh-environment-tray'), idLine.trim())
 
       // disabled 只可能出现在同一行或紧随其后
       const near = lines.slice(Math.max(0, idx - 1), idx + 3).join('\n')
@@ -281,7 +281,7 @@ console.log('\n=== 6. 组合配置里我们的行 ===')
       // preflight 会报失败 —— 那是把"用户的正常选择"误报成"配置坏了"。
       if (isDisabled) {
         info('row state', 'DISABLED（出厂默认即如此；这是合法状态，不是错误）')
-        console.log('      → 想启用：在 profile 的 cordis.patch.yml 里加 `- id: env-manager` / `  disabled: false`')
+        console.log('      → 想启用：在 profile 的 cordis.patch.yml 里加 `- id: dsh-environment-tray` / `  disabled: false`')
       } else {
         info('row state', 'ENABLED')
       }
@@ -307,7 +307,7 @@ console.log('\n=== 7. 权限与残留 ===')
     } catch {
       residue = ''
     }
-    ok('no DSH_ENV_MANAGER* residue in the registry', !residue.includes('DSH_ENV_MANAGER'))
+    ok('no DSH_ENVIRONMENT_TRAY* residue in the registry', !residue.includes('DSH_ENVIRONMENT_TRAY'))
   } else {
     warn('registry residue check skipped on this platform')
   }

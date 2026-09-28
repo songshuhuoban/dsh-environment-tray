@@ -24,7 +24,7 @@ console.log('--- host half ---')
 const host = await import(pathToFileURL(resolve('lib/index.js')).href)
 
 ok('exports apply()', typeof host.apply === 'function')
-ok('exports name === "env-manager"', host.name === 'env-manager', String(host.name))
+ok('exports name === "dsh-environment-tray"', host.name === 'dsh-environment-tray', String(host.name))
 ok(
   'declares inject: ["shellEnv", "credentials", "connection"]',
   Array.isArray(host.inject) &&
@@ -223,7 +223,7 @@ ok('registers one entry', registrations.length === 1, String(registrations.lengt
 ok(
   'entry options carry name+id+order',
   registrations[0]?.options?.name === 'conversation.session.header.utilities' &&
-    registrations[0]?.options?.id === 'env-manager' &&
+    registrations[0]?.options?.id === 'dsh-environment-tray' &&
     typeof registrations[0]?.options?.order === 'number',
   JSON.stringify(registrations[0]?.options ?? {}),
 )
@@ -259,7 +259,7 @@ ok('entry component renders without throwing', rendered !== null && rendered !==
 
 // ── 客户端 inject 导出（真实启动失败过的那个 bug 的回归测试）────────────────
 // 实测过的启动错误原文：
-//   failed to apply loader entry 3666c652 (dsh-env-manager):
+//   failed to apply loader entry 3666c652 (dsh-environment-tray):
 //   cannot get property "slots" without inject
 //
 // **两次修错**值得记下来：第一次我以为要写 package.json 的

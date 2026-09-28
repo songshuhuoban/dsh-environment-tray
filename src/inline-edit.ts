@@ -84,7 +84,7 @@ export function useInlineEdit<T>(options: EditOptions<T>) {
     }
   }
   const onBlur: React.FocusEventHandler<HTMLDivElement> = (event) => {
-    if ((event.relatedTarget as HTMLElement | null)?.getAttribute?.('data-dsh-envmgr-copy') === 'true') return
+    if ((event.relatedTarget as HTMLElement | null)?.getAttribute?.('data-dsh-environment-tray-copy') === 'true') return
     if (!event.currentTarget.contains(event.relatedTarget as Node | null)) void submit()
   }
   const onKeyDown: React.KeyboardEventHandler<HTMLInputElement | HTMLTextAreaElement> = (event) => {

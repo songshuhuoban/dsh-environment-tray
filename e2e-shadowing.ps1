@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Continue'
 $base = 'http://127.0.0.1:3180'
 $token = $args[0]
 $ws = 'E:\opensource-work\dsh-environment-tray'
-$varName = 'ENVMGR_LAYER_TEST'
+$varName = 'ENVIRONMENT_TRAY_LAYER_TEST'
 $envFile = Join-Path $ws '.env'
 
 function PostJson($url, $obj) {
@@ -17,7 +17,7 @@ function PostJson($url, $obj) {
   return curl.exe -s -m 60 -b $script:cj -X POST -H 'content-type: application/json' --data-binary "@$tmp" "$base$url"
 }
 function GetState() {
-  return (curl.exe -s -m 90 -b $script:cj "$base/api/env-manager/state") | ConvertFrom-Json
+  return (curl.exe -s -m 90 -b $script:cj "$base/api/dsh-environment-tray/state") | ConvertFrom-Json
 }
 
 $cj = Join-Path $env:TEMP 'cj4.txt'
@@ -35,11 +35,11 @@ function Check($label, $cond, $detail) {
 
 try {
   Write-Output '=== 1. 写注册表 + 写 .env（同名，值不同）==='
-  $rw = PostJson '/api/env-manager/registry' @{ scope = 'os-user'; name = $varName; value = 'registry-value'; type = 'REG_SZ' } | ConvertFrom-Json
+  $rw = PostJson '/api/dsh-environment-tray/registry' @{ scope = 'os-user'; name = $varName; value = 'registry-value'; type = 'REG_SZ' } | ConvertFrom-Json
   Check 'registry write ok' ($rw.ok -eq $true) ($rw | ConvertTo-Json -Compress)
 
-  $rd = PostJson '/api/env-manager/env/read' @{ layer = 'project-env'; cwd = $ws } | ConvertFrom-Json
-  $ew = PostJson '/api/env-manager/env' @{
+  $rd = PostJson '/api/dsh-environment-tray/env/read' @{ layer = 'project-env'; cwd = $ws } | ConvertFrom-Json
+  $ew = PostJson '/api/dsh-environment-tray/env' @{
     layer = 'project-env'; cwd = $ws; expectedRevision = $rd.revision
     edits = @(@{ op = 'set'; name = $varName; value = 'dotenv-value' })
   } | ConvertFrom-Json
@@ -66,8 +66,8 @@ try {
 
   Write-Output ''
   Write-Output '=== 3. 删掉 .env 那一层 → 生效层回落到 os-user ==='
-  $rd2 = PostJson '/api/env-manager/env/read' @{ layer = 'project-env'; cwd = $ws } | ConvertFrom-Json
-  PostJson '/api/env-manager/env' @{
+  $rd2 = PostJson '/api/dsh-environment-tray/env/read' @{ layer = 'project-env'; cwd = $ws } | ConvertFrom-Json
+  PostJson '/api/dsh-environment-tray/env' @{
     layer = 'project-env'; cwd = $ws; expectedRevision = $rd2.revision
     edits = @(@{ op = 'unset'; name = $varName })
   } | Out-Null
@@ -81,7 +81,7 @@ try {
 
   Write-Output ''
   Write-Output '=== 4. 删掉注册表那一层 → 变量完全消失 ==='
-  PostJson '/api/env-manager/registry' @{ scope = 'os-user'; name = $varName; unset = $true } | Out-Null
+  PostJson '/api/dsh-environment-tray/registry' @{ scope = 'os-user'; name = $varName; unset = $true } | Out-Null
   $s3 = GetState
   $v3 = $s3.variables | Where-Object { $_.name -eq $varName }
   Check 'variable gone entirely' ($null -eq $v3) ($v3 | ConvertTo-Json -Compress)

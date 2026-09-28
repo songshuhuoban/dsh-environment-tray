@@ -1,5 +1,5 @@
 /** Dictionaries owned by this plugin; language selection belongs to DSH. */
-export const LOCALE_NS = 'dsh-env-manager'
+export const LOCALE_NS = 'dsh-environment-tray'
 
 const en = {
   title: 'Environment variables',

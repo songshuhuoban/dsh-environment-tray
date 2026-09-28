@@ -323,7 +323,7 @@ console.log('\n--- no internal detail leakage ---')
   await write.envRead(streamReq({ url: `${ENV_ROUTE}/read`, method: 'POST', chunks: [JSON.stringify({ layer: 'nope' })] }), res)
   const body = String(res.c.body)
   ok('invalid layer is refused', res.c.status === 500, String(res.c.status))
-  ok('invalid layer message does not leak the plugin source path', !body.includes('env-manager-tray\\lib'), body.slice(0, 120))
+  ok('invalid layer message does not leak the plugin source path', !body.includes('dsh-environment-tray\\lib'), body.slice(0, 120))
   ok('invalid layer message does not leak node_modules', !body.includes('node_modules'), body.slice(0, 120))
 }
 

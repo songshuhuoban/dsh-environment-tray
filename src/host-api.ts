@@ -178,14 +178,14 @@ export async function runReg(args: string[]): Promise<Buffer> {
 const VALUE_PREVIEW_LIMIT = 120
 
 /** 路由路径。命名成 `/api/` 前缀以贴合 Web 端的既有约定。 */
-export const STATE_ROUTE = '/api/env-manager/state'
+export const STATE_ROUTE = '/api/dsh-environment-tray/state'
 
 /** 探活路由。 */
-export const HEALTH_ROUTE = '/api/env-manager/health'
+export const HEALTH_ROUTE = '/api/dsh-environment-tray/health'
 
 /** 密钥状态路由（只报"是否已配置"，永不回值）。 */
-export const CREDENTIAL_STATE_ROUTE = '/api/env-manager/credential-state'
-export const VALUE_ROUTE = '/api/env-manager/value'
+export const CREDENTIAL_STATE_ROUTE = '/api/dsh-environment-tray/credential-state'
+export const VALUE_ROUTE = '/api/dsh-environment-tray/value'
 
 /**
  * 摘要素值以便展示。
@@ -258,8 +258,8 @@ export function projectState(model: EnvironmentModel, options: ProjectStateOptio
         // 前提是**用户在 UI 里显式打开**那个开关；默认 false 就是本分支。
         //
         // 打开后，本路由能读到的值，同一个调用方本来就能经本插件自己的写路由
-        // **改写**：`POST /api/env-manager/env` 写 `.env`、
-        // `POST /api/env-manager/credentials` 写凭据库。而所有这些路由都注册在
+        // **改写**：`POST /api/dsh-environment-tray/env` 写 `.env`、
+        // `POST /api/dsh-environment-tray/credentials` 写凭据库。而所有这些路由都注册在
         // 同一道闸门后面 —— `connection.requestRejection`（Host/Origin 栅栏
         // 挡 DNS rebinding 与跨站请求，之后还有浏览器会话认证）。所以
         // "未通过闸门的调用方读不到" 这一条没有被削弱：闸门是路由级的，
@@ -343,7 +343,7 @@ export interface HostApiContext {
   credentials?: CredentialProvider | undefined
   connection?: ConnectionService | undefined
   get?(name: string): unknown
-  /** `ctx.logger('env-manager')`；任何一级缺失都必须能安全跳过。 */
+  /** `ctx.logger('dsh-environment-tray')`；任何一级缺失都必须能安全跳过。 */
   logger?(name: string): Logger | undefined
   /** 延迟激活；见 `register()` 的说明。 */
   inject?(deps: string[], callback: (scope: HostApiScope) => void): unknown
@@ -373,11 +373,11 @@ export interface HostApiOptions {
 /** 宿主 API：列表、逐项读取与路由注册。 */
 export interface HostApi {
   value(req: IncomingRequest, res: ServerResponse): Promise<void>
-  /** GET /api/env-manager/state —— 复合模型视图。 */
+  /** GET /api/dsh-environment-tray/state —— 复合模型视图。 */
   state(req: IncomingRequest, res: ServerResponse): Promise<void>
-  /** GET /api/env-manager/credential-state —— 密钥状态（只报"是否已配置"）。 */
+  /** GET /api/dsh-environment-tray/credential-state —— 密钥状态（只报"是否已配置"）。 */
   credentialState(req: IncomingRequest, res: ServerResponse): Promise<void>
-  /** GET /api/env-manager/health —— 轻量探活。 */
+  /** GET /api/dsh-environment-tray/health —— 轻量探活。 */
   health(req: IncomingRequest, res: ServerResponse): void
   /** 注册读路由。 */
   register(): unknown
@@ -479,7 +479,7 @@ export function createHostApi(options: HostApiOptions): HostApi {
         writeJson(res, 500, { ok: false, error: 'read-failed', message: '读取失败' })
       }
     },
-    /** GET /api/env-manager/state —— 复合模型视图。 */
+    /** GET /api/dsh-environment-tray/state —— 复合模型视图。 */
     async state(req, res) {
       if (!guard(req, res)) return
       if (!requireGet(req, res)) return
@@ -533,7 +533,7 @@ export function createHostApi(options: HostApiOptions): HostApi {
     },
 
     /**
-     * GET /api/env-manager/credential-state —— 探测一组名字的密钥状态。
+     * GET /api/dsh-environment-tray/credential-state —— 探测一组名字的密钥状态。
      *
      * 用 GET + 查询串而不是把名字塞进主 state 响应，原因有二：
      *  1. 主 state 是环境变量的视图，密钥是另一个键空间；混在一起会含糊。
@@ -565,7 +565,7 @@ export function createHostApi(options: HostApiOptions): HostApi {
       }
     },
 
-    /** GET /api/env-manager/health —— 轻量探活，供 P4 目视确认。 */
+    /** GET /api/dsh-environment-tray/health —— 轻量探活，供 P4 目视确认。 */
     health(req, res) {
       if (!guard(req, res)) return
       if (!requireGet(req, res)) return
@@ -594,7 +594,7 @@ export function createHostApi(options: HostApiOptions): HostApi {
     register() {
       // 防御：缺 ctx.inject 的上下文（测试替身、非 cordis 宿主）不应炸掉
       if (typeof ctx.inject !== 'function') {
-        ctx.logger?.('env-manager')?.warn?.('[env-manager] ctx.inject unavailable — host API routes not registered')
+        ctx.logger?.('dsh-environment-tray')?.warn?.('[dsh-environment-tray] ctx.inject unavailable — host API routes not registered')
         return undefined
       }
 
@@ -624,8 +624,8 @@ export function createHostApi(options: HostApiOptions): HostApi {
             }
           }
         })
-        ctx.logger?.('env-manager')?.info?.(
-          `[env-manager] routes registered: ${STATE_ROUTE}, ${HEALTH_ROUTE}, ${CREDENTIAL_STATE_ROUTE}`,
+        ctx.logger?.('dsh-environment-tray')?.info?.(
+          `[dsh-environment-tray] routes registered: ${STATE_ROUTE}, ${HEALTH_ROUTE}, ${CREDENTIAL_STATE_ROUTE}`,
         )
       })
     },
@@ -667,8 +667,8 @@ export function createHostApi(options: HostApiOptions): HostApi {
             }
           }
         })
-        ctx.logger?.('env-manager')?.info?.(
-          `[env-manager] write routes registered: ${ENV_ROUTE}, ${CREDENTIAL_ROUTE}, ${REGISTRY_ROUTE}`,
+        ctx.logger?.('dsh-environment-tray')?.info?.(
+          `[dsh-environment-tray] write routes registered: ${ENV_ROUTE}, ${CREDENTIAL_ROUTE}, ${REGISTRY_ROUTE}`,
         )
       })
     },

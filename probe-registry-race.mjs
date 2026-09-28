@@ -13,7 +13,7 @@
 import { execFileSync } from 'node:child_process'
 import { OsEnvironmentLayer, USER_SCOPE } from './lib/registry.js'
 
-const TAG = `DSH_ENV_MANAGER_RACE_${String(process.pid)}`
+const TAG = `DSH_ENVIRONMENT_TRAY_RACE_${String(process.pid)}`
 const N = 8
 
 const run = async (args) => execFileSync('reg.exe', args, { windowsHide: true, maxBuffer: 8 * 1024 * 1024 })

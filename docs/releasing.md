@@ -1,6 +1,6 @@
 # 发布 `dsh-environment-tray`
 
-插件的 npm 包名是 `dsh-environment-tray`，用户可见名称是 **DSH Environment Tray（环境变量管理器）**。`env-manager` 是 Cordis 行 ID，升级时保持稳定。发布包内有已构建的 Host 和 Web Client，安装者无需构建 TypeScript。
+插件的 npm 包名是 `dsh-environment-tray`，用户可见名称是 **DSH Environment Tray（环境变量管理器）**。`dsh-environment-tray` 是 Cordis 行 ID，升级时保持稳定。发布包内有已构建的 Host 和 Web Client，安装者无需构建 TypeScript。
 
 ## 分工
 

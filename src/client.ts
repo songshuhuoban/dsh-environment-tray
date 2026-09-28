@@ -18,13 +18,13 @@ const IconEditOutline16 = Primitives.IconEditOutlineRegular ?? Primitives.IconEd
 const IconRefreshOutline16 = Primitives.IconRefreshOutlineRegular ?? Primitives.IconRefreshOutline16
 const IconSearchOutline16 = Primitives.IconSearchOutlineRegular ?? Primitives.IconSearchOutline16
 const IconTrashOutline16 = Primitives.IconTrashOutlineRegular ?? Primitives.IconTrashOutline16
-const STATE_URL = '/api/env-manager/state'
-const VALUE_URL = '/api/env-manager/value'
-const ENV_WRITE_URL = '/api/env-manager/env'
-const ENV_READ_URL = '/api/env-manager/env/read'
-const REGISTRY_URL = '/api/env-manager/registry'
-const CREDENTIAL_STATE_URL = '/api/env-manager/credential-state'
-const CREDENTIAL_WRITE_URL = '/api/env-manager/credentials'
+const STATE_URL = '/api/dsh-environment-tray/state'
+const VALUE_URL = '/api/dsh-environment-tray/value'
+const ENV_WRITE_URL = '/api/dsh-environment-tray/env'
+const ENV_READ_URL = '/api/dsh-environment-tray/env/read'
+const REGISTRY_URL = '/api/dsh-environment-tray/registry'
+const CREDENTIAL_STATE_URL = '/api/dsh-environment-tray/credential-state'
+const CREDENTIAL_WRITE_URL = '/api/dsh-environment-tray/credentials'
 
 interface LayerView {
   layer: string
@@ -106,7 +106,7 @@ async function copyValue(value: string): Promise<void> {
     return
   }
   const input = document.createElement('textarea')
-  input.setAttribute('data-dsh-envmgr-copy', 'true')
+  input.setAttribute('data-dsh-environment-tray-copy', 'true')
   input.value = value
   input.style.position = 'fixed'
   input.style.opacity = '0'
@@ -140,9 +140,9 @@ function DraftValue(props: LocaleProps & { edit: ReturnType<typeof useInlineEdit
   const [copyError, setCopyError] = useState<unknown>(null)
   const multiline = /[\r\n]/.test(edit.draft)
   const masked = sensitive && !edit.visible
-  return React.createElement('span', { className: 'dsh-envmgr-valuecell dsh-envmgr-value', style: { fontSize: T.value.fontSize } },
+  return React.createElement('span', { className: 'dsh-environment-tray-valuecell dsh-environment-tray-value', style: { fontSize: T.value.fontSize } },
     React.createElement(multiline && !masked ? 'textarea' : 'input', {
-      className: 'dsh-envmgr-input', 'aria-label': t('valueLabel', { name }), 'aria-invalid': edit.error !== null,
+      className: 'dsh-environment-tray-input', 'aria-label': t('valueLabel', { name }), 'aria-invalid': edit.error !== null,
       value: edit.draft, autoFocus: true, type: masked ? 'password' : 'text',
       rows: multiline ? Math.min(4, edit.draft.split(/\r\n|\r|\n/).length) : undefined,
       title: t(multiline && masked ? 'multilineHint' : 'editHint'),
@@ -163,7 +163,7 @@ function DraftValue(props: LocaleProps & { edit: ReturnType<typeof useInlineEdit
       },
     }),
     edit.error !== null || copyError !== null ? React.createElement('span', {
-      className: 'dsh-envmgr-value-error', role: 'alert', style: T.meta,
+      className: 'dsh-environment-tray-value-error', role: 'alert', style: T.meta,
     }, errorLabel(t, edit.error ?? copyError)) : null,
   )
 }
@@ -217,7 +217,7 @@ function ValueCell(props: LocaleProps & { name: string; layer: LayerView; sensit
     }
   }
   const text = visible ? fullValue ?? props.layer.valueSummary?.preview ?? '—' : null
-  return React.createElement('span', { className: 'dsh-envmgr-valuecell dsh-envmgr-value', style: { fontSize: T.value.fontSize } },
+  return React.createElement('span', { className: 'dsh-environment-tray-valuecell dsh-environment-tray-value', style: { fontSize: T.value.fontSize } },
     React.createElement(Value, { masked: !visible, expanded: fullValue !== null, title: visible ? text ?? undefined : undefined }, text),
     React.createElement(Button, {
       variant: 'ghost', size: 'sm', icon: React.createElement(EyeIcon, { hidden: visible }),
@@ -279,7 +279,7 @@ function VariableRow(props: LocaleProps & {
         : effective ? React.createElement(ValueCell, {
           t, key: version, name: variable.name, layer: effective, sensitive: variable.sensitive,
         }) : React.createElement(Value, null, '—'),
-      React.createElement('span', { className: 'dsh-envmgr-row-meta' },
+      React.createElement('span', { className: 'dsh-environment-tray-row-meta' },
         React.createElement(Meta, { parts: edit.editing ? [
           edit.busy ? t(edit.ready ? 'saving' : 'loading') : layerLabel(t, target!.layer),
         ] : [layerLabel(t, variable.effective), variable.shadowed ? t('layerCount', { count: variable.layers.length }) : null] }),
@@ -302,11 +302,11 @@ function VariableRow(props: LocaleProps & {
         }),
       ),
     ),
-    expanded ? React.createElement('div', { className: 'dsh-envmgr-layers' },
+    expanded ? React.createElement('div', { className: 'dsh-environment-tray-layers' },
       variable.layers.map((layer) => React.createElement(Row, { key: layer.layer },
         React.createElement(Key, { title: layer.path }, layerLabel(t, layer.layer)),
         React.createElement(ValueCell, { t, key: version, name: variable.name, layer, sensitive: variable.sensitive }),
-        React.createElement('span', { className: 'dsh-envmgr-row-meta' },
+        React.createElement('span', { className: 'dsh-environment-tray-row-meta' },
           React.createElement('span', {
             style: T.meta, title: layer.blockedCode ? reasonLabel(t, layer.blockedCode, state.blockedReasonText?.[layer.blockedCode]) : layer.path,
           }, layer.layer === variable.effective ? t('current') : null),
@@ -330,7 +330,7 @@ function CredentialRow(props: LocaleProps & { name: string; info: CredentialInfo
       : info.configured ? React.createElement(ValueCell, {
         t, key: version, name, layer: { layer: 'credential', redacted: true }, sensitive: true,
       }) : React.createElement(Value, null, '—'),
-    React.createElement('span', { className: 'dsh-envmgr-row-meta' },
+    React.createElement('span', { className: 'dsh-environment-tray-row-meta' },
       React.createElement(Meta, { parts: [edit.editing
         ? edit.busy ? t(edit.ready ? 'saving' : 'loading') : t('layer.file')
         : info.configured ? info.source ? layerLabel(t, info.source) : info.sourceLabel : t('unset')] }),
@@ -464,7 +464,7 @@ function EnvManagerPanel({ t }: LocaleProps) {
     }) : null,
     error !== null ? React.createElement(Note, null, t('readError', { error: errorLabel(t, error) })) : null,
     restartNeeded ? React.createElement(Note, null, t('restart')) : null,
-    undo ? React.createElement('div', { className: 'dsh-envmgr-editor' },
+    undo ? React.createElement('div', { className: 'dsh-environment-tray-editor' },
       React.createElement('span', { style: T.meta }, t('deleted', { name: undo.name })),
       React.createElement(Button, { variant: 'ghost', size: 'sm', disabled: undoBusy, onClick: undoRemove }, t('undoDelete')),
     ) : null,
@@ -484,7 +484,7 @@ function EnvManagerAction({ t }: LocaleProps) {
       title: t('title'), 'aria-label': t('title'), onClick: () => setOpen(true),
     }),
     React.createElement(Modal, {
-      open, onClose: () => setOpen(false), title: t('title'), closeLabel: t('close'), className: 'dsh-envmgr-dialog',
+      open, onClose: () => setOpen(false), title: t('title'), closeLabel: t('close'), className: 'dsh-environment-tray-dialog',
     }, open ? React.createElement(EnvManagerPanel, { t }) : null),
   )
 }
@@ -498,9 +498,9 @@ function apply(ctx: {
   register(options: Record<string, unknown>, component: (props: LocaleProps) => unknown): unknown
 } }) {
   installClientStyles()
-  ctx.effect(() => ctx.locale.register(LOCALE_NS, dictionaries), 'env-manager: browser dictionaries')
+  ctx.effect(() => ctx.locale.register(LOCALE_NS, dictionaries), 'dsh-environment-tray: browser dictionaries')
   ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
-    name: 'conversation.session.header.utilities', id: 'env-manager', order: 100, locale: LOCALE_NS,
+    name: 'conversation.session.header.utilities', id: 'dsh-environment-tray', order: 100, locale: LOCALE_NS,
   }, EnvManagerAction))
 }
 export { apply, inject, EnvManagerAction, EnvManagerPanel }

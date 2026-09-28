@@ -23,7 +23,7 @@ assert.equal(pack.version, manifest.version)
 const actual = new Set(pack.files.map(({ path }) => path))
 const expected = new Set([
   'package.json', 'README.md', 'LICENSE', 'cordis.patch.yml',
-  'docs/releasing.md', 'docs/dsh-env-manager-design.md',
+  'docs/releasing.md', 'docs/dsh-environment-tray-design.md',
   'lib/index.js', 'lib/client.js', 'lib/env-model.js', 'lib/env-write.js',
   'lib/credentials.js', 'lib/registry.js', 'lib/host-api.js',
   'lib/write-routes.js', 'lib/live-environment.js',
@@ -32,6 +32,7 @@ assert.deepEqual([...actual].sort(), [...expected].sort(),
   `Unexpected npm tarball contents: ${[...actual].sort().join(', ')}`)
 
 const patch = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
+assert.match(patch, /^\s+- id: dsh-environment-tray\s*$/m)
 assert.match(patch, /^\s+name: dsh-environment-tray\s*$/m)
 assert.match(patch, /^\s+disabled: true\s*$/m)
 

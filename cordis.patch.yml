@@ -20,7 +20,7 @@
 # 在 profile 自己的 patch 层里覆盖这一行（该层在本 bundle 层**之后**应用）：
 #
 #   # $DSH_HOME/profiles/web/cordis.patch.yml
-#   - id: env-manager
+#   - id: dsh-environment-tray
 #     disabled: false
 #
 # 也可以直接编辑本文件把它改成 `disabled: false`，但那样会在下次
@@ -32,6 +32,6 @@
 # 已启用的 Loader 条目并挑出声明了 `dsh.client` 的包，所以双面包不需要第二行。
 
 - insert:
-    - id: env-manager
+    - id: dsh-environment-tray
       name: dsh-environment-tray
       disabled: true

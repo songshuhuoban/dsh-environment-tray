@@ -74,16 +74,16 @@ export function NewVariableForm(props: LocaleProps & {
   const masked = sensitive && !visible
   const multiline = /[\r\n]/.test(value)
   return React.createElement('form', {
-    className: 'dsh-envmgr-create', 'aria-label': t('newVariable'), onSubmit: submit,
+    className: 'dsh-environment-tray-create', 'aria-label': t('newVariable'), onSubmit: submit,
     onKeyDown: (event: React.KeyboardEvent) => {
       if (event.key === 'Escape' && !event.nativeEvent?.isComposing) {
         event.preventDefault(); event.stopPropagation(); cancel()
       }
     },
   },
-  React.createElement('div', { className: 'dsh-envmgr-create-fields' },
+  React.createElement('div', { className: 'dsh-environment-tray-create-fields' },
     React.createElement('label', null, t('saveTo'), React.createElement('select', {
-      className: 'dsh-envmgr-input', 'aria-label': t('saveTo'), value: layer, disabled: busy,
+      className: 'dsh-environment-tray-input', 'aria-label': t('saveTo'), value: layer, disabled: busy,
       onChange: (event: React.ChangeEvent<HTMLSelectElement>) => { setLayer(event.target.value); setError(null) },
     }, props.layers.map((layer) => React.createElement('option', { key: layer, value: layer }, layerLabel(t, layer))))),
     React.createElement('label', null, t('variableName'), React.createElement(Input, {
@@ -91,10 +91,10 @@ export function NewVariableForm(props: LocaleProps & {
       autoComplete: 'off', spellCheck: false, 'aria-invalid': error !== null,
       onChange: (event: React.ChangeEvent<HTMLInputElement>) => { setName(event.target.value); setVisible(false); setError(null) },
     })),
-    React.createElement('label', { className: 'dsh-envmgr-create-value' }, t('variableValue'),
+    React.createElement('label', { className: 'dsh-environment-tray-create-value' }, t('variableValue'),
       React.createElement('span', null,
         React.createElement(masked ? 'input' : 'textarea', {
-          className: 'dsh-envmgr-input', 'aria-label': t('variableValue'), value, type: masked ? 'password' : undefined,
+          className: 'dsh-environment-tray-input', 'aria-label': t('variableValue'), value, type: masked ? 'password' : undefined,
           rows: 2, disabled: busy, readOnly: masked && multiline, autoComplete: 'off', spellCheck: false,
           title: masked && multiline ? t('multilineHint') : undefined,
           onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setValue(event.target.value),
@@ -109,7 +109,7 @@ export function NewVariableForm(props: LocaleProps & {
     ),
   ),
   error !== null ? React.createElement('p', { role: 'alert' }, errorLabel(t, error)) : null,
-  React.createElement('div', { className: 'dsh-envmgr-form-actions' },
+  React.createElement('div', { className: 'dsh-environment-tray-form-actions' },
     React.createElement(Button, { type: 'button', variant: 'ghost', size: 'sm', disabled: busy, onClick: cancel }, t('cancel')),
     React.createElement(Button, { type: 'submit', variant: 'primary', size: 'sm', disabled: busy }, t(busy ? 'saving' : 'create')),
   ))
@@ -158,8 +158,8 @@ export function DeleteAction(props: LocaleProps & {
       onClick: () => { props.onOpen(); setError(null); setOpen(true) },
     }),
     React.createElement(Modal, {
-      open, title: t('deleteVariable'), closeLabel: t('close'), className: 'dsh-envmgr-confirm', onClose: close,
-      footer: React.createElement('div', { className: 'dsh-envmgr-form-actions' },
+      open, title: t('deleteVariable'), closeLabel: t('close'), className: 'dsh-environment-tray-confirm', onClose: close,
+      footer: React.createElement('div', { className: 'dsh-environment-tray-form-actions' },
         React.createElement(Button, { variant: 'ghost', size: 'sm', disabled: busy, onClick: close }, t('cancel')),
         React.createElement(Button, { variant: 'primary', size: 'sm', disabled: busy, onClick: remove }, t(busy ? 'saving' : 'confirmDelete')),
       ),

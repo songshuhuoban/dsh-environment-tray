@@ -1,7 +1,7 @@
 /**
  * 往返测试：真的写一次注册表、读回来、再删掉。
  *
- * 用自建变量名 `DSH_ENV_MANAGER_RTT_<pid>`，测试后**无条件清理**（含失败路径），
+ * 用自建变量名 `DSH_ENVIRONMENT_TRAY_RTT_<pid>`，测试后**无条件清理**（含失败路径），
  * 不留残留。这是验证写入路径唯一可信的方式 —— 假执行器只能证明命令行拼对了，
  * 证明不了 `reg.exe` 真的接受它。
  *
@@ -20,7 +20,7 @@ const ok = (label, condition, detail = '') => {
   console.log(`${condition ? 'PASS' : 'FAIL'}  ${label}${detail ? ` — ${detail}` : ''}`)
 }
 
-const NAME = `DSH_ENV_MANAGER_RTT_${String(process.pid)}`
+const NAME = `DSH_ENVIRONMENT_TRAY_RTT_${String(process.pid)}`
 const PLAIN_VALUE = 'rtt-plain-value'
 const EXPAND_VALUE = '%USERPROFILE%\\rtt-bin'
 

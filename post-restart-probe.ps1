@@ -135,7 +135,7 @@ console.log('spawned pid ' + String(child.pid) + ' via ' + bin)
   $booted = $false
   for ($i = 0; $i -lt 50; $i++) {
     Start-Sleep -Milliseconds 1500
-    $code = curl.exe -s -o NUL -w '%{http_code}' "http://127.0.0.1:$ProbePort/api/env-manager/health" 2>$null
+    $code = curl.exe -s -o NUL -w '%{http_code}' "http://127.0.0.1:$ProbePort/api/dsh-environment-tray/health" 2>$null
     if ($code -eq '401' -or $code -eq '200') { $booted = $true; break }
   }
   Check 'the isolated instance booted' $booted "no answer on port $ProbePort"
@@ -145,13 +145,13 @@ console.log('spawned pid ' + String(child.pid) + ' via ' + bin)
   try { $errText = (Get-Content "$logFile.err" -Raw -ErrorAction SilentlyContinue) } catch { }
   if (-not $errText) { $errText = '' }
   Note 'plugin load lines'
-  ($errText -split "`n") | Where-Object { $_ -match '\[env-manager\]' } | ForEach-Object { "        $($_.Trim())" }
+  ($errText -split "`n") | Where-Object { $_ -match '\[dsh-environment-tray\]' } | ForEach-Object { "        $($_.Trim())" }
 
   Check 'plugin loaded and registered the contributor' ($errText -match 'contributor registered') 'no registration line in stdout/stderr'
   Check 'credentials probe succeeded' ($errText -match 'credentials service available') 'no credentials line'
 
   # 路由存在但必须被闸门挡住：401 证明"路由已注册 + 策略生效"两件事
-  $healthCode = curl.exe -s -o NUL -w '%{http_code}' "http://127.0.0.1:$ProbePort/api/env-manager/health"
+  $healthCode = curl.exe -s -o NUL -w '%{http_code}' "http://127.0.0.1:$ProbePort/api/dsh-environment-tray/health"
   Check 'health route exists and is gated (401)' ($healthCode -eq '401') "got $healthCode"
 
   # 从子进程的 stdout 里取 token —— 它启动时会打印带 token 的 URL
@@ -168,15 +168,15 @@ console.log('spawned pid ' + String(child.pid) + ' via ' + bin)
     curl.exe -s -L -c $cj -b $cj -o NUL "http://127.0.0.1:$ProbePort/?token=$token"
 
     # 跨站请求必须被闸门挡住（Host/Origin 围栏）
-    $cross = curl.exe -s -o NUL -w '%{http_code}' -H 'sec-fetch-site: cross-site' -H 'origin: https://evil.example' "http://127.0.0.1:$ProbePort/api/env-manager/state"
+    $cross = curl.exe -s -o NUL -w '%{http_code}' -H 'sec-fetch-site: cross-site' -H 'origin: https://evil.example' "http://127.0.0.1:$ProbePort/api/dsh-environment-tray/state"
     Check 'cross-site request is refused (403)' ($cross -eq '403') "got $cross"
 
     # 外部 Host（DNS rebinding 形状）也必须被挡
-    $rebind = curl.exe -s -o NUL -w '%{http_code}' -H 'host: attacker.example' "http://127.0.0.1:$ProbePort/api/env-manager/state"
+    $rebind = curl.exe -s -o NUL -w '%{http_code}' -H 'host: attacker.example' "http://127.0.0.1:$ProbePort/api/dsh-environment-tray/state"
     Check 'foreign Host is refused (403)' ($rebind -eq '403') "got $rebind"
 
     # 已认证请求必须成功
-    $authed = curl.exe -s -m 60 -b $cj -w '|%{http_code}' "http://127.0.0.1:$ProbePort/api/env-manager/state?reveal=0"
+    $authed = curl.exe -s -m 60 -b $cj -w '|%{http_code}' "http://127.0.0.1:$ProbePort/api/dsh-environment-tray/state?reveal=0"
     $code = ($authed -split '\|')[-1]
     Check 'authenticated state request succeeds' ($code -eq '200') "got $code"
     if ($code -eq '200') {
@@ -221,7 +221,7 @@ console.log('spawned pid ' + String(child.pid) + ' via ' + bin)
 
 Write-Output ''
 Write-Output '=== 6. 残留检查 ==='
-$residue = (& reg.exe query 'HKCU\Environment' 2>&1 | Select-String 'ENVMGR|DSH_ENV_MANAGER').Count
+$residue = (& reg.exe query 'HKCU\Environment' 2>&1 | Select-String 'ENVIRONMENT_TRAY|DSH_ENVIRONMENT_TRAY').Count
 Check 'no registry residue' ($residue -eq 0) "$residue remaining"
 Check 'no .env left in the workspace' (-not (Test-Path (Join-Path $ws '.env'))) 'still present'
 Check 'no probe home left behind' (-not (Test-Path (Join-Path $ws '.probe-home'))) 'still present'

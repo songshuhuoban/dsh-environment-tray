@@ -31,7 +31,7 @@ function errorMessage(error: unknown): string {
 }
 
 /** 贡献者名字，用于诊断与重复检测。 */
-export const name = 'env-manager'
+export const name = 'dsh-environment-tray'
 
 /**
  * 依赖的服务名。**必须声明**：cordis 会推迟 `apply` 直到这些服务就绪。
@@ -50,13 +50,13 @@ export const name = 'env-manager'
 export const inject = ['shellEnv', 'credentials', 'connection']
 
 /** 我们贡献的那个变量名。不属于内置保留 key。 */
-const LIVE_KEY = 'DSH_ENV_MANAGER_LIVE'
+const LIVE_KEY = 'DSH_ENVIRONMENT_TRAY_LIVE'
 
 /** 标记文件路径：外部进程改写它的内容，用来证明 resolve() 读的是实时值。 */
-const MARKER_KEY = 'DSH_ENV_MANAGER_MARKER'
+const MARKER_KEY = 'DSH_ENVIRONMENT_TRAY_MARKER'
 
 /** 日志前缀。 */
-const TAG = '[env-manager]'
+const TAG = '[dsh-environment-tray]'
 
 /**
  * 写一条诊断。**任何日志失败都不得影响插件加载** —— 这个插件会挂进用户
@@ -67,7 +67,7 @@ const TAG = '[env-manager]'
  */
 function announce(ctx: PluginContext, message: string): void {
   try {
-    ctx.logger?.('env-manager')?.info?.(`${TAG} ${message}`)
+    ctx.logger?.('dsh-environment-tray')?.info?.(`${TAG} ${message}`)
   } catch {
     /* 日志服务不可用不能影响加载 */
   }
@@ -103,7 +103,7 @@ export function apply(ctx: PluginContext): void {
 
   try {
     const dispose = shellEnv.register({
-      name: 'env-manager-live-probe',
+      name: 'dsh-environment-tray-live-probe',
       variables: {
         [LIVE_KEY]: {
           description:

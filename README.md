@@ -2,7 +2,7 @@
 
 npm 包名：`dsh-environment-tray`。在 DSH Web UI 里管理环境变量：**① `.env` 文件 ② 运行时 `DSH_*` 注入变量 ③ 密钥 ④ Windows 用户级与系统级环境变量**。
 
-完整设计（含所有实测证据与取舍理由）见 [`docs/dsh-env-manager-design.md`](docs/dsh-env-manager-design.md)。
+完整设计（含所有实测证据与取舍理由）见 [`docs/dsh-environment-tray-design.md`](docs/dsh-environment-tray-design.md)。
 这份 README 包含安装、使用和验证步骤。
 
 ---
@@ -28,7 +28,7 @@ dsh plugin --profile web add (Resolve-Path .).Path
 安装只把 bundle 加入 profile。编辑 `$DSH_HOME/profiles/web/cordis.patch.yml`；未设置 `DSH_HOME` 时，文件在 `~/.dsh/profiles/web/cordis.patch.yml`。在 YAML 顶层数组中加入以下条目，启用插件：
 
 ```yaml
-- id: env-manager
+- id: dsh-environment-tray
   disabled: false
 ```
 
@@ -39,7 +39,7 @@ dsh --profile web --dump-config
 dsh web
 ```
 
-在输出中确认 `env-manager` 行的 `name` 是 `dsh-environment-tray` 且 `disabled` 为 `false`。打开一个**已有会话**，点击右上角的「环境变量」双滑杆图标。空白新会话页不显示会话标题栏，因此没有该入口。首次加入 bundle 后需要重启，单改 profile patch 不能让已运行的前端扫描新增包。
+在输出中确认该条目的 `id` 和 `name` 都是 `dsh-environment-tray`，且 `disabled` 为 `false`。打开一个**已有会话**，点击右上角的「环境变量」双滑杆图标。空白新会话页不显示会话标题栏，因此没有该入口。首次加入 bundle 后需要重启，单改 profile patch 不能让已运行的前端扫描新增包。
 
 ### 升级与卸载
 
@@ -48,11 +48,11 @@ dsh web
 $newVersion = '0.1.1'
 dsh plugin --profile web add "dsh-environment-tray@$newVersion"
 
-# 卸载包；再从 profile 的 cordis.patch.yml 删除 env-manager 启用条目
+# 卸载包；再从 profile 的 cordis.patch.yml 删除 dsh-environment-tray 启用条目
 dsh plugin --profile web remove dsh-environment-tray
 ```
 
-如果以前通过本仓库的旧包名 `dsh-env-manager` 安装过开发版，先用 `dsh plugin --profile web remove dsh-env-manager` 移除旧 bundle，再按上面的步骤安装新包，避免两个 bundle 同时写入 `env-manager` 行。
+如果安装过本仓库的早期开发版，升级前先从 web profile 移除旧 bundle，再按上面的步骤安装新包，避免 profile 中出现重复条目。
 
 ### 打包文件与来源
 
@@ -92,7 +92,7 @@ DSH 0.1.5 使用设置图标作为兼容替代，0.1.7 使用原生双滑杆图�
 | `src/client-ui.ts` | 客户端表现层 | 只有排版与样式，不认识 `fetch`；KEY/VALUE 是内容、其余是注解。被 `client.ts` 内联进同一个 bundle |
 | `src/inline-edit.ts` | 原位编辑状态 | 完整原值、失焦与键盘提交、取消、并发提交去重；被内联进客户端 bundle |
 | `src/client-actions.ts` | 新建表单与删除确认 | 多字段显式提交、重复提交去重、失败保留草稿、按层删除；被内联进客户端 bundle |
-| `src/client-locales.ts` | 中英文词典与错误翻译 | `dsh-env-manager` 命名空间；`locale` 由 DSH 提供，词典随插件卸载释放；错误按机器码翻译 |
+| `src/client-locales.ts` | 中英文词典与错误翻译 | `dsh-environment-tray` 命名空间；`locale` 由 DSH 提供，词典随插件卸载释放；错误按机器码翻译 |
 
 ---
 
@@ -210,7 +210,7 @@ dsh --profile web --port 3180 --no-open   # 从输出里拿 ?token=...
 powershell -NoProfile -ExecutionPolicy Bypass -File .\e2e-shadowing.ps1 <token>
 ```
 
-它会自建 `ENVMGR_LAYER_TEST` 变量（**不能用 `DSH_` 前缀** —— 那会被禁止名单
+它会自建 `ENVIRONMENT_TRAY_LAYER_TEST` 变量（**不能用 `DSH_` 前缀** —— 那会被禁止名单
 正确拒绝），在同名变量同时存在于 `.env` 与注册表时断言：
 
 - `layerCount=2`、`shadowed=true`、**`effective=project-env`**（信任序）

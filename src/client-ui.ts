@@ -53,7 +53,7 @@ export const T = {
 } as const
 
 /** 注入一次的小样式表：只放内联 style 表达不了的伪类与媒体查询。 */
-const STYLE_ID = 'dsh-env-manager-client-style'
+const STYLE_ID = 'dsh-environment-tray-client-style'
 
 /**
  * 这张表负责三件内联样式做不到的事：
@@ -66,8 +66,8 @@ const STYLE_ID = 'dsh-env-manager-client-style'
  *    `<head>` 末尾的。
  */
 const CSS = `
-.dsh-envmgr-dialog { width: min(1080px, calc(100vw - 48px)); max-width: none; }
-.dsh-envmgr-row {
+.dsh-environment-tray-dialog { width: min(1080px, calc(100vw - 48px)); max-width: none; }
+.dsh-environment-tray-row {
   display: grid;
   grid-template-columns: minmax(140px, 260px) minmax(0, 1fr) 220px;
   align-items: center;
@@ -75,43 +75,43 @@ const CSS = `
   padding: 5px 8px;
   border-radius: 6px;
 }
-.dsh-envmgr-row:hover { background: var(--dsw-alias-fill-quaternary, rgba(128,128,128,0.10)); }
-.dsh-envmgr-actions { opacity: 0; transition: opacity .12s ease; }
-.dsh-envmgr-row-meta { display: grid; grid-template-columns: minmax(0, 1fr) 88px; align-items: center; gap: 8px; min-width: 0; }
-.dsh-envmgr-row-meta > span:first-child { overflow: hidden; text-overflow: ellipsis; }
-.dsh-envmgr-actions { display: grid; grid-template-columns: repeat(3, 28px); gap: 2px; min-height: 28px; }
-.dsh-envmgr-actions button, .dsh-envmgr-value > button { width: 28px; height: 28px; padding: 0; }
-.dsh-envmgr-row:hover .dsh-envmgr-actions,
-.dsh-envmgr-row:focus-within .dsh-envmgr-actions { opacity: 1; }
-@media (hover: none) { .dsh-envmgr-actions { opacity: 1; } }
-.dsh-envmgr-scroll { max-height: min(62vh, 760px); overflow-y: auto; overscroll-behavior: contain; }
-.dsh-envmgr-valuecell { min-width: 0; }
-.dsh-envmgr-value { display: grid; grid-template-columns: minmax(0, 1fr) repeat(2, 28px); align-items: center; gap: 2px; font-family: ${MONO}; }
-.dsh-envmgr-input { width: 100%; min-width: 0; box-sizing: border-box; padding: 4px 6px; border: 1px solid var(--dsw-alias-border-l2, rgba(128,128,128,.22)); border-radius: 5px; background: transparent; color: inherit; font: inherit; }
-.dsh-envmgr-input:focus { outline: 1px solid currentColor; outline-offset: -1px; }
-.dsh-envmgr-input:is(textarea) { resize: vertical; }
-.dsh-envmgr-input[aria-invalid=true] { border-color: var(--dsw-alias-text-error, #c33); }
-.dsh-envmgr-value-error { grid-column: 1 / -1; font-family: sans-serif; }
-.dsh-envmgr-editor { display: flex; align-items: center; gap: 6px; padding: 2px 8px 6px; }
-.dsh-envmgr-layers { margin: 2px 0 6px; box-shadow: inset 2px 0 var(--dsw-alias-border-l2, rgba(128,128,128,.22)); }
-.dsh-envmgr-create { margin: 8px 0 12px; padding: 12px; border: 1px solid var(--dsw-alias-border-l2, rgba(128,128,128,.22)); border-radius: 6px; font-size: 12px; }
-.dsh-envmgr-create-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 10px; }
-.dsh-envmgr-create label { display: grid; gap: 5px; min-width: 0; }
-.dsh-envmgr-create-value { grid-column: 1 / -1; }
-.dsh-envmgr-create-value > span { display: flex; align-items: start; gap: 6px; }
-.dsh-envmgr-create select, .dsh-envmgr-create textarea { font: inherit; }
-.dsh-envmgr-create option { background: var(--dsw-alias-fill-primary, Canvas); color: var(--dsw-alias-text-primary, CanvasText); }
-.dsh-envmgr-form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
-.dsh-envmgr-confirm { width: min(440px, calc(100vw - 32px)); }
-.dsh-envmgr-confirm p { overflow-wrap: anywhere; font-size: 13px; }
+.dsh-environment-tray-row:hover { background: var(--dsw-alias-fill-quaternary, rgba(128,128,128,0.10)); }
+.dsh-environment-tray-actions { opacity: 0; transition: opacity .12s ease; }
+.dsh-environment-tray-row-meta { display: grid; grid-template-columns: minmax(0, 1fr) 88px; align-items: center; gap: 8px; min-width: 0; }
+.dsh-environment-tray-row-meta > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.dsh-environment-tray-actions { display: grid; grid-template-columns: repeat(3, 28px); gap: 2px; min-height: 28px; }
+.dsh-environment-tray-actions button, .dsh-environment-tray-value > button { width: 28px; height: 28px; padding: 0; }
+.dsh-environment-tray-row:hover .dsh-environment-tray-actions,
+.dsh-environment-tray-row:focus-within .dsh-environment-tray-actions { opacity: 1; }
+@media (hover: none) { .dsh-environment-tray-actions { opacity: 1; } }
+.dsh-environment-tray-scroll { max-height: min(62vh, 760px); overflow-y: auto; overscroll-behavior: contain; }
+.dsh-environment-tray-valuecell { min-width: 0; }
+.dsh-environment-tray-value { display: grid; grid-template-columns: minmax(0, 1fr) repeat(2, 28px); align-items: center; gap: 2px; font-family: ${MONO}; }
+.dsh-environment-tray-input { width: 100%; min-width: 0; box-sizing: border-box; padding: 4px 6px; border: 1px solid var(--dsw-alias-border-l2, rgba(128,128,128,.22)); border-radius: 5px; background: transparent; color: inherit; font: inherit; }
+.dsh-environment-tray-input:focus { outline: 1px solid currentColor; outline-offset: -1px; }
+.dsh-environment-tray-input:is(textarea) { resize: vertical; }
+.dsh-environment-tray-input[aria-invalid=true] { border-color: var(--dsw-alias-text-error, #c33); }
+.dsh-environment-tray-value-error { grid-column: 1 / -1; font-family: sans-serif; }
+.dsh-environment-tray-editor { display: flex; align-items: center; gap: 6px; padding: 2px 8px 6px; }
+.dsh-environment-tray-layers { margin: 2px 0 6px; box-shadow: inset 2px 0 var(--dsw-alias-border-l2, rgba(128,128,128,.22)); }
+.dsh-environment-tray-create { margin: 8px 0 12px; padding: 12px; border: 1px solid var(--dsw-alias-border-l2, rgba(128,128,128,.22)); border-radius: 6px; font-size: 12px; }
+.dsh-environment-tray-create-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 10px; }
+.dsh-environment-tray-create label { display: grid; gap: 5px; min-width: 0; }
+.dsh-environment-tray-create-value { grid-column: 1 / -1; }
+.dsh-environment-tray-create-value > span { display: flex; align-items: start; gap: 6px; }
+.dsh-environment-tray-create select, .dsh-environment-tray-create textarea { font: inherit; }
+.dsh-environment-tray-create option { background: var(--dsw-alias-fill-primary, Canvas); color: var(--dsw-alias-text-primary, CanvasText); }
+.dsh-environment-tray-form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.dsh-environment-tray-confirm { width: min(440px, calc(100vw - 32px)); }
+.dsh-environment-tray-confirm p { overflow-wrap: anywhere; font-size: 13px; }
 
 /* 窄屏：KEY 与注解一行，VALUE 独占下一行 —— 竖着扫仍然成立，且不再横向溢出 */
 @media (max-width: 760px) {
-  .dsh-envmgr-dialog { width: calc(100vw - 16px); }
-  .dsh-envmgr-row { grid-template-columns: minmax(0, 1fr) 180px; row-gap: 2px; }
-  .dsh-envmgr-row > .dsh-envmgr-valuecell { grid-column: 1 / -1; grid-row: 2; }
-  .dsh-envmgr-row > .dsh-envmgr-row-meta { grid-column: 2; grid-row: 1; }
-  .dsh-envmgr-create-fields { grid-template-columns: minmax(0, 1fr); }
+  .dsh-environment-tray-dialog { width: calc(100vw - 16px); }
+  .dsh-environment-tray-row { grid-template-columns: minmax(0, 1fr) 180px; row-gap: 2px; }
+  .dsh-environment-tray-row > .dsh-environment-tray-valuecell { grid-column: 1 / -1; grid-row: 2; }
+  .dsh-environment-tray-row > .dsh-environment-tray-row-meta { grid-column: 2; grid-row: 1; }
+  .dsh-environment-tray-create-fields { grid-template-columns: minmax(0, 1fr); }
 }
 `
 
@@ -144,7 +144,7 @@ export function Row(props: { children?: React.ReactNode; active?: boolean; onBlu
   return React.createElement(
     'div',
     {
-      className: 'dsh-envmgr-row',
+      className: 'dsh-environment-tray-row',
       onBlur: props.onBlur,
       style: {
         background: props.active === true ? 'var(--dsw-alias-fill-quaternary, rgba(128,128,128,0.10))' : 'transparent',
@@ -158,7 +158,7 @@ export function Row(props: { children?: React.ReactNode; active?: boolean; onBlu
 export function RowActions(props: { children?: React.ReactNode }): React.ReactElement {
   return React.createElement(
     'span',
-    { className: 'dsh-envmgr-actions' },
+    { className: 'dsh-environment-tray-actions' },
     props.children ?? [React.createElement('span', { key: 0 }), React.createElement('span', { key: 1 }), React.createElement('span', { key: 2 })],
   )
 }
@@ -197,7 +197,7 @@ export function Value(props: {
     'span',
     {
       // 类名恒定：窄屏要在媒体查询里把它换到第二行，而媒体查询赢不过内联样式
-      className: 'dsh-envmgr-valuecell',
+      className: 'dsh-environment-tray-valuecell',
       style: {
         ...T.value,
         fontFamily: MONO,
@@ -264,7 +264,7 @@ export function LayerDetail(props: { rows: readonly { name: string; facts: strin
 export function ScrollArea(props: { children?: React.ReactNode }): React.ReactElement {
   return React.createElement(
     'div',
-    { className: 'dsh-envmgr-scroll', style: { margin: '0 -4px', padding: '0 4px' } },
+    { className: 'dsh-environment-tray-scroll', style: { margin: '0 -4px', padding: '0 4px' } },
     props.children,
   )
 }

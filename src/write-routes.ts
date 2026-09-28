@@ -42,9 +42,9 @@ import type {
 const MAX_BODY_BYTES = 256 * 1024
 
 /** 路由路径。 */
-export const ENV_ROUTE = '/api/env-manager/env'
-export const CREDENTIAL_ROUTE = '/api/env-manager/credentials'
-export const REGISTRY_ROUTE = '/api/env-manager/registry'
+export const ENV_ROUTE = '/api/dsh-environment-tray/env'
+export const CREDENTIAL_ROUTE = '/api/dsh-environment-tray/credentials'
+export const REGISTRY_ROUTE = '/api/dsh-environment-tray/registry'
 
 /**
  * 请求策略闸门。
@@ -346,7 +346,7 @@ export function createWriteRoutes(options: WriteRoutesOptions): WriteRouteHandle
 
   return {
     /**
-     * POST /api/env-manager/env —— 批量编辑某个 `.env` 层。
+     * POST /api/dsh-environment-tray/env —— 批量编辑某个 `.env` 层。
      *
      * 请求体：`{ layer, expectedRevision, edits: [{op:'set'|'unset', name, value?}] }`
      * 可带 `path` 作断言，但必须与推导结果一致。
@@ -388,7 +388,7 @@ export function createWriteRoutes(options: WriteRoutesOptions): WriteRouteHandle
     },
 
     /**
-     * GET 不支持；POST /api/env-manager/env/read 用 POST 语义读一个层。
+     * GET 不支持；POST /api/dsh-environment-tray/env/read 用 POST 语义读一个层。
      *
      * 之所以不做成 GET：读也需要 `layer` 参数且要回 revision，放在同一族里
      * 更好对齐。仍然只接受层标识。
@@ -411,7 +411,7 @@ export function createWriteRoutes(options: WriteRoutesOptions): WriteRouteHandle
     },
 
     /**
-     * POST /api/env-manager/credentials —— 写入或移除密钥。
+     * POST /api/dsh-environment-tray/credentials —— 写入或移除密钥。
      *
      * 请求体：`{ ref, value }` 写入；`{ ref, unset: true }` 移除。
      * **响应里永远不会出现密钥本身** —— 只回 `describe()` 的结果。
@@ -442,7 +442,7 @@ export function createWriteRoutes(options: WriteRoutesOptions): WriteRouteHandle
     },
 
     /**
-     * POST /api/env-manager/registry —— 写入或修改 OS 层变量。
+     * POST /api/dsh-environment-tray/registry —— 写入或修改 OS 层变量。
      *
      * 请求体：`{ scope, name, value, type? }`；`{ scope, name, unset: true }` 删除。
      * `type` 必须显式给出（客户端从读取结果里带回），否则 `REG_EXPAND_SZ`

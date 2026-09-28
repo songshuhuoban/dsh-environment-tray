@@ -1,4 +1,4 @@
-// Evidence probe for docs/dsh-env-manager-design.md §4.1.
+// Evidence probe for docs/dsh-environment-tray-design.md §4.1.
 // Answers: what does node:util.parseEnv actually accept, and does it expand refs?
 // This decides how the plugin serializes .env output.
 //

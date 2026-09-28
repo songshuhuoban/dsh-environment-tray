@@ -468,7 +468,7 @@ interface CompositeVariable {
 
 ### 6.4 命名空间与并发栅栏
 
-用 `ctx.settingsScope.bind(spec)` 绑定一个命名空间（如 `env-manager`），用于持久化**非密钥**的 UI 元数据。
+用 `ctx.settingsScope.bind(spec)` 绑定一个命名空间（如 `dsh-environment-tray`），用于持久化**非密钥**的 UI 元数据。
 
 必须实现 `expectedRevision` 栅栏 —— 契约原文：
 
@@ -553,9 +553,9 @@ ctx.shellEnv.list()   // → BashEnvVariableInfo[]，可枚举、不执行 resol
 **关于编辑 shell profile**：建议采用「受管标记块」方案，而不是任意文件编辑：
 
 ```sh
-# >>> dsh-env-manager >>>
+# >>> dsh-environment-tray >>>
 export MY_VAR="value"
-# <<< dsh-env-manager <<<
+# <<< dsh-environment-tray <<<
 ```
 
 这样可以安全撤销，也不会破坏用户自己的 profile 内容。但必须告知：**这只对之后新启动的 shell 生效**。
@@ -725,7 +725,7 @@ function scrubbedParentEnv() {
 ```ts
 // 我们自己的贡献者：每次 shell 调用都重新读盘，而不是读冻结的快照
 ctx.shellEnv.register({
-  name: 'env-manager-overlay',
+  name: 'dsh-environment-tray-overlay',
   // ⚠️ 只能贡献 DSH_* 前缀的 key（见 11.6 的约束）
   variables: { DSH_SHELL_OVERLAY: { description: '...' } },
   resolve: () => ({ DSH_SHELL_OVERLAY: readLiveEnvStamp() }),
@@ -848,7 +848,7 @@ P0 的目标是用实测回答两个决定性假设。结论如下 —— 其中
 
 - `dsh plugin --profile web add <path>` 把包装成 `link:` 依赖
 - **但包必须在 `package.json` 声明 `dsh.bundle.patch`**，否则 CLI 只发一条警告并当作普通依赖：
-  `warning: dsh-env-manager declares no dsh.bundle — installed as a plain dependency, not a profile layer`
+  `warning: dsh-environment-tray declares no dsh.bundle — installed as a plain dependency, not a profile layer`
 - 声明后 CLI **自动把包名追加进 `profiles/web/package.json` 的 `dsh.profile.bundles`** —— 不需要手改 profile
 - bundle patch 的每一行都应该是 `insert`，这样这一层只**追加**行，绝不覆盖/禁用 base 或 web-app 的行
 
@@ -857,14 +857,14 @@ P0 的目标是用实测回答两个决定性假设。结论如下 —— 其中
 第一次启动时插件的 `apply()` 跑得**早于** `dsh-shell-env` 就绪，日志为：
 
 ```
-[env-manager] plugin loaded (pid=60212, uptime=4.3s, DSH_SHELL=1)
-[env-manager] ctx.shellEnv unavailable — contributor NOT registered
+[dsh-environment-tray] plugin loaded (pid=60212, uptime=4.3s, DSH_SHELL=1)
+[dsh-environment-tray] ctx.shellEnv unavailable — contributor NOT registered
 ```
 
 原因在 `cordis/src/reflect.ts` 的 `_getImpl`：strict 模式下要求 `impl.fiber.state === ACTIVE`。修复方式是导出 `inject: ['shellEnv']`，让 cordis 推迟 `apply` 到依赖就绪。修复后：
 
 ```
-[env-manager] contributor registered: DSH_ENV_MANAGER_LIVE (marker=...)
+[dsh-environment-tray] contributor registered: DSH_ENVIRONMENT_TRAY_LIVE (marker=...)
 ```
 
 **结论**：任何要读取其他服务的 DSH 插件都必须声明 `inject`，否则会静默拿到 `undefined`。
@@ -916,7 +916,7 @@ P0 的目标是用实测回答两个决定性假设。结论如下 —— 其中
 |---|---|
 | `package.json` | 声明 `dsh.bundle.patch` + `dsh.client`（双面包） |
 | `cordis.patch.yml` | bundle 层，只有 `insert`，不含覆盖 |
-| `lib/index.js` | 宿主半边：声明 `inject: ['shellEnv']`，注册 `DSH_ENV_MANAGER_LIVE` 贡献者 |
+| `lib/index.js` | 宿主半边：声明 `inject: ['shellEnv']`，注册 `DSH_ENVIRONMENT_TRAY_LIVE` 贡献者 |
 | `lib/client.js` | 客户端半边：手写惰性 CJS 工厂，占据 `settings.plugins.tab` |
 | `check-p0.mjs` | 22 项本地断言，**不需要启动 DSH** 即可验证两个半边 |
 | `probe-parseenv.mjs` | §4.1 的 `.env` 解析语义证据 |
@@ -975,7 +975,7 @@ Node 真实行为不符**：
 
 | 项 | 阻塞原因 |
 |---|---|
-| P0 端到端验证（`DSH_ENV_MANAGER_LIVE` 出现在 shell 调用里） | 需要重启 3080 实例（PID 59800） |
+| P0 端到端验证（`DSH_ENVIRONMENT_TRAY_LIVE` 出现在 shell 调用里） | 需要重启 3080 实例（PID 59800） |
 | 浏览器页签目视确认 | 同上；且需要人眼看 Settings → Plugins |
 | P3 凭据域接入 | 未开始 |
 | OS 用户级层（Windows 注册表） | 未开始 |
@@ -1123,7 +1123,7 @@ PASS  post-set view has no value
 理由是不想让整个插件因缺服务而加载失败。**这条路走不通**：
 
 ```
-[env-manager] credential probe failed: cannot get property "credentials" without inject
+[dsh-environment-tray] credential probe failed: cannot get property "credentials" without inject
 ```
 
 cordis 对**未在插件 `inject` 里声明**的服务**直接抛错**，而不是返回 `undefined`。
@@ -1132,7 +1132,7 @@ cordis 对**未在插件 `inject` 里声明**的服务**直接抛错**，而不�
 修正后把 `credentials` 加进 `inject`，实测通过：
 
 ```
-[env-manager] credentials service available (1 stored record(s): {"grant":1})
+[dsh-environment-tray] credentials service available (1 stored record(s): {"grant":1})
 ```
 
 它读到了真实 `.credentials.yaml` 的**种类与数量**（不含值）。
@@ -1172,8 +1172,8 @@ cordis 对**未在插件 `inject` 里声明**的服务**直接抛错**，而不�
 实测证据（同一段代码，修复前后）：
 
 ```
-修复前： GET /api/env-manager/health  ->  400 （空响应体）
-修复后： GET /api/env-manager/health  ->  200 {"ok":true,"pid":21344,...}
+修复前： GET /api/dsh-environment-tray/health  ->  400 （空响应体）
+修复后： GET /api/dsh-environment-tray/health  ->  200 {"ok":true,"pid":21344,...}
 ```
 
 修法是注册前显式 `.bind(this)`。**已写进代码注释**，因为这类失败极难从症状反推。
@@ -1190,11 +1190,11 @@ cordis 对**未在插件 `inject` 里声明**的服务**直接抛错**，而不�
 ### 16.4 宿主的实际输出（隔离实例实测）
 
 ```
-GET /api/env-manager/health
+GET /api/dsh-environment-tray/health
 -> 200 {"ok":true,"pid":21344,"uptimeSeconds":56,
-        "routes":["/api/env-manager/state","/api/env-manager/health"]}
+        "routes":["/api/dsh-environment-tray/state","/api/dsh-environment-tray/health"]}
 
-GET /api/env-manager/state
+GET /api/dsh-environment-tray/state
 -> 200  32006 bytes
    counts = {"total":101,"shadowed":0,"forbidden":11,"sensitive":0,"runtimeManaged":4}
 ```
@@ -1203,7 +1203,7 @@ GET /api/env-manager/state
 认证后取 index，应用组合 URL 里赫然有我们这一项，夹在第一方插件之间：
 
 ```
-.../dsh-client-ui-deliverables/client.js, dsh-env-manager/client.js, /dsh-typert-registry/client.js...
+.../dsh-client-ui-deliverables/client.js, dsh-environment-tray/client.js, /dsh-typert-registry/client.js...
 ```
 
 拉取该组合脚本（11 MB，53 个插件），确认我们的 bundle 内容在里面：
@@ -1211,7 +1211,7 @@ GET /api/env-manager/state
 ```
 PASS  combo contains our bundle registration
 PASS  combo contains our tab label (环境变量)
-PASS  combo contains our fetch target (/api/env-manager/state)
+PASS  combo contains our fetch target (/api/dsh-environment-tray/state)
 ```
 
 这是在不重启用户实例的前提下能取得的最强证据：**数据面（宿主路由）与
@@ -1233,7 +1233,7 @@ localhost 上 24 KB 可接受，故列为**已知优化项而非缺陷**：真�
 
 | 项 | 阻塞原因 |
 |---|---|
-| P0 端到端验证（`DSH_ENV_MANAGER_LIVE` 出现在 shell 调用里）| 需要重启 3080 实例（PID 59800）|
+| P0 端到端验证（`DSH_ENVIRONMENT_TRAY_LIVE` 出现在 shell 调用里）| 需要重启 3080 实例（PID 59800）|
 | 浏览器页签目视确认 | 同上；代码面已证明被加载，只剩渲染效果 |
 | P5 OS 用户级层（Windows 注册表）| 未开始 |
 | 写入路径接入 UI（P2 的后端已就绪，尚未暴露写路由）| 未开始 |
@@ -1275,7 +1275,7 @@ localhost 上 24 KB 可接受，故列为**已知优化项而非缺陷**：真�
 ### 17.3 真实注册表往返（15 项，含无条件清理）
 
 假执行器只能证明命令行拼对了，证明不了 `reg.exe` 真的接受它。所以做了一次**真实写入**，
-用自建变量名 `DSH_ENV_MANAGER_RTT_<pid>`，`finally` 块无条件清理：
+用自建变量名 `DSH_ENVIRONMENT_TRAY_RTT_<pid>`，`finally` 块无条件清理：
 
 ```
 PASS  REG_SZ write reports success — {"ok":true,"type":"REG_SZ"}
@@ -1407,7 +1407,7 @@ HTTP 语义上这个 bug 更严重：**真实请求会挂住**而不是返回。
 
 | 项 | 阻塞原因 |
 |---|---|
-| **P0 端到端验证**（`DSH_ENV_MANAGER_LIVE` 出现在 shell 调用里）| **需要重启 3080 实例（PID 59800）** |
+| **P0 端到端验证**（`DSH_ENVIRONMENT_TRAY_LIVE` 出现在 shell 调用里）| **需要重启 3080 实例（PID 59800）** |
 | 浏览器页签目视确认 | 同上；客户端 bundle、路由、写入面均已实测，只剩渲染效果 |
 | 密钥写入的 UI 入口 | 后端 `/credentials` 已就绪并实测，UI 尚未接 |
 
@@ -1415,7 +1415,7 @@ HTTP 语义上这个 bug 更严重：**真实请求会挂住**而不是返回。
 
 ## 19. P7 进展：密钥 UI 入口（2026-09-26）
 
-新增密钥状态路由 `GET /api/env-manager/credential-state` 与客户端密钥面板。
+新增密钥状态路由 `GET /api/dsh-environment-tray/credential-state` 与客户端密钥面板。
 **目标里"③ 密钥"到此在 UI 上闭环**，四层全部可看可管。88 项断言（宿主）+ 端到端实测。
 
 ### 19.1 密钥 UI 的硬约束：草稿从空开始
@@ -1480,14 +1480,14 @@ POST /credentials {"ref":"MY_FAKE_SECRET","unset":true}
 |---|---|
 | 探针 home 已删除 | ✅ |
 | 3180 端口无监听 | ✅ |
-| 注册表无残留（`HKCU\Environment` 里无 `DSH_ENV_MANAGER*`）| ✅ |
+| 注册表无残留（`HKCU\Environment` 里无 `DSH_ENVIRONMENT_TRAY*`）| ✅ |
 | **真实 `~/.dsh/.credentials.yaml` 未被写入探针密钥** | ✅ |
 
 ### 19.6 仍未完成的
 
 | 项 | 阻塞原因 |
 |---|---|
-| **P0 端到端验证**（`DSH_ENV_MANAGER_LIVE` 出现在 shell 调用里）| **需要重启 3080 实例（PID 59800）** |
+| **P0 端到端验证**（`DSH_ENVIRONMENT_TRAY_LIVE` 出现在 shell 调用里）| **需要重启 3080 实例（PID 59800）** |
 | 浏览器页签目视确认 | 同上 |
 
 ---
@@ -1557,7 +1557,7 @@ PASS  duplicate edits produce exactly one line — "A=\"second\"\n"
 
 | 项 | 阻塞原因 |
 |---|---|
-| **P0 端到端验证**（`DSH_ENV_MANAGER_LIVE` 出现在 shell 调用里）| **需要重启 3080 实例（PID 59800）** |
+| **P0 端到端验证**（`DSH_ENVIRONMENT_TRAY_LIVE` 出现在 shell 调用里）| **需要重启 3080 实例（PID 59800）** |
 | 浏览器页签目视确认 | 同上 |
 
 ---
@@ -1584,16 +1584,16 @@ PASS  duplicate edits produce exactly one line — "A=\"second\"\n"
 
 ```
 第一方 /api/gateway              -> 401   ✅ 有鉴权
-我的 /api/env-manager/state      -> 200   ❌ 无鉴权
+我的 /api/dsh-environment-tray/state      -> 200   ❌ 无鉴权
 
-攻击：POST /api/env-manager/env
+攻击：POST /api/dsh-environment-tray/env
       Sec-Fetch-Site: cross-site
       Origin: https://evil.example
 -> 200 {"ok":true,...,"keys":["PWNED_BY_CROSS_SITE"]}
    磁盘：PWNED_BY_CROSS_SITE="yes"
 ```
 
-**本机任何页面**只要 `fetch('http://127.0.0.1:3180/api/env-manager/env', {mode:'no-cors', ...})`
+**本机任何页面**只要 `fetch('http://127.0.0.1:3180/api/dsh-environment-tray/env', {mode:'no-cors', ...})`
 就能往 `.env` 写任意内容 —— 典型的 confused-deputy。而 `dsh-client-connection` 的源码
 注释说明这类绕过的后果正是它存在的理由：DNS rebinding 与恶意页面的跨站请求。
 
@@ -1637,7 +1637,7 @@ PASS  duplicate edits produce exactly one line — "A=\"second\"\n"
 
 | 项 | 阻塞原因 |
 |---|---|
-| **P0 端到端验证**（`DSH_ENV_MANAGER_LIVE` 出现在 shell 调用里）| **需要重启 3080 实例（PID 59800）** |
+| **P0 端到端验证**（`DSH_ENVIRONMENT_TRAY_LIVE` 出现在 shell 调用里）| **需要重启 3080 实例（PID 59800）** |
 | 浏览器页签目视确认 | 同上 |
 
 ---
@@ -1690,7 +1690,7 @@ PASS  only the target line changed — "FIRST=\"one\"\nSECOND=\"changed\"\n"
 
 | 项 | 阻塞原因 |
 |---|---|
-| **P0 端到端验证**（`DSH_ENV_MANAGER_LIVE` 出现在 shell 调用里）| **需要重启 3080 实例（PID 59800）** |
+| **P0 端到端验证**（`DSH_ENVIRONMENT_TRAY_LIVE` 出现在 shell 调用里）| **需要重启 3080 实例（PID 59800）** |
 | 浏览器页签目视确认 | 同上 |
 
 ---
@@ -1707,8 +1707,8 @@ UI 拿到的是**摘要**（长值被截断到 120 字符），所以"从 UI 记
 一并回传：
 
 ```json
-{"ok":true,"scope":"os-user","name":"DSH_ENV_MANAGER_RTT_53236","removed":true,
- "undo":{"name":"DSH_ENV_MANAGER_RTT_53236",
+{"ok":true,"scope":"os-user","name":"DSH_ENVIRONMENT_TRAY_RTT_53236","removed":true,
+ "undo":{"name":"DSH_ENVIRONMENT_TRAY_RTT_53236",
          "value":"%USERPROFILE%\\rtt-bin",
          "type":"REG_EXPAND_SZ"},
  "appliesAfterRestart":true}
@@ -1753,7 +1753,7 @@ UI 相应地显示"已删除；宿主未能取得原值，无法撤销。"，而
 
 | 项 | 阻塞原因 |
 |---|---|
-| **P0 端到端验证**（`DSH_ENV_MANAGER_LIVE` 出现在 shell 调用里）| **需要重启 3080 实例（PID 59800）** |
+| **P0 端到端验证**（`DSH_ENVIRONMENT_TRAY_LIVE` 出现在 shell 调用里）| **需要重启 3080 实例（PID 59800）** |
 | 浏览器页签目视确认 | 同上 |
 
 ---
@@ -1836,7 +1836,7 @@ writeChains.set(key, run.then(noop, noop))  ← 链上不留未处理的拒绝
 
 | 项 | 阻塞原因 |
 |---|---|
-| **P0 端到端验证**（`DSH_ENV_MANAGER_LIVE` 出现在 shell 调用里）| **需要重启 3080 实例（PID 59800）** |
+| **P0 端到端验证**（`DSH_ENVIRONMENT_TRAY_LIVE` 出现在 shell 调用里）| **需要重启 3080 实例（PID 59800）** |
 | 浏览器页签目视确认 | 同上 |
 
 ---
@@ -1905,7 +1905,7 @@ README 里的内容经程序校验与磁盘实际一致：所有引用的文件�
 
 | 项 | 阻塞原因 |
 |---|---|
-| **P0 端到端验证**（`DSH_ENV_MANAGER_LIVE` 出现在 shell 调用里）| **需要重启 3080 实例（PID 59800）** |
+| **P0 端到端验证**（`DSH_ENVIRONMENT_TRAY_LIVE` 出现在 shell 调用里）| **需要重启 3080 实例（PID 59800）** |
 | 浏览器页签目视确认 | 同上 |
 
 ---
@@ -1983,7 +1983,7 @@ PASS  the rejection names the derived path
 
 | 项 | 阻塞原因 |
 |---|---|
-| **P0 端到端验证**（`DSH_ENV_MANAGER_LIVE` 出现在 shell 调用里）| **需要重启 3080 实例（PID 59800）** |
+| **P0 端到端验证**（`DSH_ENVIRONMENT_TRAY_LIVE` 出现在 shell 调用里）| **需要重启 3080 实例（PID 59800）** |
 | 浏览器页签目视确认 | 同上 |
 
 ---
@@ -2028,7 +2028,7 @@ PASS  the rejection names the derived path
 
 | 项 | 阻塞原因 |
 |---|---|
-| **P0 端到端验证**（`DSH_ENV_MANAGER_LIVE` 出现在 shell 调用里）| **需要重启 3080 实例（PID 59800）** |
+| **P0 端到端验证**（`DSH_ENVIRONMENT_TRAY_LIVE` 出现在 shell 调用里）| **需要重启 3080 实例（PID 59800）** |
 | 浏览器页签目视确认 | 同上 |
 
 ---
@@ -2044,7 +2044,7 @@ PASS  the rejection names the derived path
 | 步骤 | 结果 |
 |---|---|
 | 写注册表（`os-user`）| `state` 里出现，`effective=os-user`，带 `registryType: REG_SZ` 与值 |
-| 独立 `reg.exe` 读回 | `ENVMGR_LAYER_TEST  REG_SZ  registry-value` |
+| 独立 `reg.exe` 读回 | `ENVIRONMENT_TRAY_LAYER_TEST  REG_SZ  registry-value` |
 | 再写同名 `.env`（`project-env`）| `layerCount=2`、`shadowed=true` |
 | **信任序判定** | **`effective=project-env`** —— 高层遮蔽低层 |
 | 层序 | `project-env,os-user`（符合 `SOURCE_ORDER`）|
@@ -2058,12 +2058,12 @@ PASS  the rejection names the derived path
 
 ### 28.2 一个意外收获：禁止名单挡住了我自己的测试
 
-第一版测试用了 `DSH_ENV_MANAGER_LAYER_TEST` 作变量名，`.env` 写入**被拒绝**：
+第一版测试用了 `DSH_ENVIRONMENT_TRAY_LAYER_TEST` 作变量名，`.env` 写入**被拒绝**：
 
 ```json
 {"ok":false,"error":"validation-failed",
  "problems":[{"code":"bootstrap-only",
-   "message":"\"DSH_ENV_MANAGER_LAYER_TEST\" 只能由启动环境提供 … 请改为导出 …"}]}
+   "message":"\"DSH_ENVIRONMENT_TRAY_LAYER_TEST\" 只能由启动环境提供 … 请改为导出 …"}]}
 ```
 
 我一开始以为是测试 bug，但**那正是规则该做的事** —— 而且它证明了禁止名单
@@ -2082,7 +2082,7 @@ PASS  the rejection names the derived path
 
 | 项 | 阻塞原因 |
 |---|---|
-| **P0 端到端验证**（`DSH_ENV_MANAGER_LIVE` 出现在 shell 调用里）| **需要重启 3080 实例（PID 59800）** |
+| **P0 端到端验证**（`DSH_ENVIRONMENT_TRAY_LIVE` 出现在 shell 调用里）| **需要重启 3080 实例（PID 59800）** |
 | 浏览器页签目视确认 | 同上 |
 
 ---
@@ -2114,9 +2114,9 @@ PASS  the rejection names the derived path
 第 5 组的实测输出（脚本自身已验证可用）：
 
 ```
-[env-manager] plugin loaded (pid=58372, uptime=17.3s, DSH_SHELL=1)
-[env-manager] contributor registered: DSH_ENV_MANAGER_LIVE (marker=unset)
-[env-manager] credentials service available (1 stored record(s): {"grant":1})
+[dsh-environment-tray] plugin loaded (pid=58372, uptime=17.3s, DSH_SHELL=1)
+[dsh-environment-tray] contributor registered: DSH_ENVIRONMENT_TRAY_LIVE (marker=unset)
+[dsh-environment-tray] credentials service available (1 stored record(s): {"grant":1})
 PASS  health route exists and is gated (401)
 PASS  cross-site request is refused (403)
 PASS  foreign Host is refused (403)
@@ -2158,8 +2158,8 @@ PASS  client bundle is in the boot graph
 
 ```
 Failed to load plugins
-dsh-env-manager
-failed to apply loader entry 37f9efcc (dsh-env-manager):
+dsh-environment-tray
+failed to apply loader entry 37f9efcc (dsh-environment-tray):
 cannot get property "slots" without inject
 ```
 
@@ -2183,7 +2183,7 @@ cannot get property "slots" without inject
 修好后实测 boot manifest 里出现了该字段（此前根本不存在）：
 
 ```json
-{"id":"dsh-env-manager","rev":"93bf3510c15b2b16-48",
+{"id":"dsh-environment-tray","rev":"93bf3510c15b2b16-48",
  "inject":["@deepseek-ai/dsh-client-ui-slots","@deepseek-ai/dsh-client-ui-settings-plugins"]}
 ```
 
@@ -2281,7 +2281,7 @@ TypeScript 的唯一正当理由是**把已经写在注释里的契约变成编�
 ### 31.3 这道门禁自己出过的三个错（都已修，记下来免得重犯）
 
 **(a) 跨轮次的异步泄漏伪装成真差异。** 第一版报"新 bundle 多发了一次
-`GET /api/env-manager/state`"。加一行调用栈抓取就定位了：那一帧属于
+`GET /api/dsh-environment-tray/state`"。加一行调用栈抓取就定位了：那一帧属于
 `src/client.legacy.js` —— 上一轮驱动里还没跑完的 promise 链，在下一轮驱动
 开始时才调到 `fetch`，而 `globalThis.fetch` 那时已经换成新轮的 mock 了。
 修法是每轮驱动一个令牌，非本轮的调用**不记录**并返回永不 resolve 的 promise，
@@ -2310,7 +2310,7 @@ TypeScript 的唯一正当理由是**把已经写在注释里的契约变成编�
 
 `applyEnvEdits` 校验可表示性时用 `edit.value ?? ''`，写入时却直接传
 `edit.value`，`String(undefined)` 得到 `"undefined"`。已在 `lib` 与 `src` 两侧
-复现；HTTP 可达：`POST /api/env-manager/env` 带 `{layer, edits:[{op:'set',name:'FOO'}]}`
+复现；HTTP 可达：`POST /api/dsh-environment-tray/env` 带 `{layer, edits:[{op:'set',name:'FOO'}]}`
 会让文件里出现 `FOO="undefined"` —— 一个看起来正常、实际是垃圾的值。
 
 修法是让写入与校验用同一套语义：
@@ -2409,7 +2409,7 @@ next[i] = { kind: 'entry', raw: content + eol, content, key: seg.key, value }
 ```ts
 ctx.slots.inject('conversation.session.header.utilities', () =>
   ctx.slots.register(
-    { name: 'conversation.session.header.utilities', id: 'env-manager', order: 100 },
+    { name: 'conversation.session.header.utilities', id: 'dsh-environment-tray', order: 100 },
     EnvManagerAction,
   ),
 )
@@ -2513,11 +2513,11 @@ props 都是**从被打包的实现里读出来的**，不靠名字猜（磁盘�
 内容就是 KEY/VALUE，横向越宽越好扫，所以显式放宽：
 
 ```css
-.dsh-envmgr-dialog { width: min(1080px, calc(100vw - 48px)); max-width: none; }
+.dsh-environment-tray-dialog { width: min(1080px, calc(100vw - 48px)); max-width: none; }
 @media (max-width: 760px) {
-  .dsh-envmgr-dialog { width: calc(100vw - 16px); }
-  .dsh-envmgr-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 2px; }
-  .dsh-envmgr-valuecell { grid-column: 1 / -1; }   /* VALUE 换到第二行 */
+  .dsh-environment-tray-dialog { width: calc(100vw - 16px); }
+  .dsh-environment-tray-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 2px; }
+  .dsh-environment-tray-valuecell { grid-column: 1 / -1; }   /* VALUE 换到第二行 */
 }
 ```
 
@@ -2526,7 +2526,7 @@ props 都是**从被打包的实现里读出来的**，不靠名字猜（磁盘�
 - **能覆盖 `Modal` 自己的宽度**，是因为两边都是单类选择器，同优先级下**后出现在
   文档里的胜出**，而这张表是运行时追加到 `<head>` 末尾的。不需要 `!important`。
 - **网格必须从内联样式搬进样式表** —— 内联样式赢不过媒体查询，窄屏的"三列压两列"
-  就无从实现。类名因此变成 `.dsh-envmgr-row` / `.dsh-envmgr-valuecell`，
+  就无从实现。类名因此变成 `.dsh-environment-tray-row` / `.dsh-environment-tray-valuecell`，
   门禁也改成按类名找行（比"哪一行有 gridTemplateColumns"更稳）。
 
 ### 33.2 排序：按"要改它该去哪一层"，不按"当前谁在生效"
@@ -2585,7 +2585,7 @@ reveal=all          → 敏感名也回摘要
 
 **信任论证**（写在 `host-api.ts` 那个分支的注释里）：路由本来就在
 `connection.requestRejection` 后面（Host/Origin 栅栏 + 会话鉴权），而同一道门后面
-就是 `POST /api/env-manager/env` 与 `POST /api/env-manager/credentials` ——
+就是 `POST /api/dsh-environment-tray/env` 与 `POST /api/dsh-environment-tray/credentials` ——
 **能写就能读回**，这不是新增的攻击面。凭据域之所以仍然不透明，是因为它物理上
 没有值可给。
 
