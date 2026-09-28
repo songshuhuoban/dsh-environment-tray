@@ -20,7 +20,7 @@
  * `project-env` / `user-env`），所以这里做一层人类可读映射，但**保留原始值**
  * 以便诊断。
  *
- * @module dsh-env-manager/credentials
+ * @module dsh-environment-tray/credentials
  */
 
 import type {

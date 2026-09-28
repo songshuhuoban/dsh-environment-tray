@@ -16,7 +16,7 @@
  *     会让 DSH **启动失败**，不是被忽略。UI 必须前置拦截。
  *  6. 唯一例外：`$DSH_HOME/.env` 允许那 4 个代理变量。
  *
- * @module dsh-env-manager/env-model
+ * @module dsh-environment-tray/env-model
  */
 
 import { readFileSync } from 'node:fs'
@@ -379,10 +379,10 @@ export function writabilityOf(name: string, layer: EnvLayerId | string): Writabi
 
 /** `blockedCode` → 人类可读文案。客户端直接取用，宿主不再重复传输。 */
 export const BLOCKED_REASON_TEXT = {
-  'process-inherited': '继承自启动环境，无法从进程内部修改',
-  'proxy-not-in-home': '代理变量只允许放在 $DSH_HOME/.env；项目 .env 会随仓库分发',
-  'bootstrap-only': '命中禁止名单：写进 .env 会导致 DSH 拒绝启动',
-  'unknown-layer': '未知层',
+  'process-inherited': '当前进程层只读',
+  'proxy-not-in-home': '请在用户 .env 设置代理',
+  'bootstrap-only': '请在启动 DSH 前设置',
+  'unknown-layer': '不支持此环境层',
 }
 
 /** 某一层里命中的取值：值 + 来源文件（`process` 层没有 `path`）。 */

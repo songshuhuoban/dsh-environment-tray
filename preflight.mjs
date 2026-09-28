@@ -50,20 +50,20 @@ try {
 if (manifest !== undefined) {
   const bundles = manifest.dsh?.profile?.bundles ?? []
   const deps = manifest.dependencies ?? {}
-  ok('our package is listed in dsh.profile.bundles', bundles.includes('dsh-env-manager'), bundles.join(', '))
-  ok('our package is a dependency of the profile', typeof deps['dsh-env-manager'] === 'string', String(deps['dsh-env-manager']))
+  ok('our package is listed in dsh.profile.bundles', bundles.includes('dsh-environment-tray'), bundles.join(', '))
+  ok('our package is a dependency of the profile', typeof deps['dsh-environment-tray'] === 'string', String(deps['dsh-environment-tray']))
   ok('patchReload is declared', typeof manifest.dsh?.profile?.patchReload === 'string', String(manifest.dsh?.profile?.patchReload))
 }
 
 console.log('\n=== 2. 包解析 ===')
 {
-  const linked = join(PROFILE, 'node_modules', 'dsh-env-manager')
+  const linked = join(PROFILE, 'node_modules', 'dsh-environment-tray')
   ok('the package is linked into the profile', existsSync(linked), linked)
   if (existsSync(linked)) {
     const real = readFileSync(join(linked, 'package.json'), 'utf8')
     const parsed = JSON.parse(real)
     info('resolved package name', parsed.name)
-    ok('resolved manifest is ours', parsed.name === 'dsh-env-manager', String(parsed.name))
+    ok('resolved manifest is ours', parsed.name === 'dsh-environment-tray', String(parsed.name))
     ok('it declares dsh.bundle.patch', typeof parsed.dsh?.bundle?.patch === 'string', String(parsed.dsh?.bundle?.patch))
     ok('it declares dsh.client.platform', parsed.dsh?.client?.platform === 'web', String(parsed.dsh?.client?.platform))
 
@@ -200,7 +200,7 @@ console.log('\n=== 5. 客户端 bundle ===')
         Modal: stub,
         DisclosureRow: stub,
         IconChevronDownOutline14: stub,
-        IconContextInjectionOutline16: stub,
+        IconSettingsOutline16: stub,
         IconEditOutline16: stub,
         IconRefreshOutline16: stub,
         IconSearchOutline16: stub,
@@ -212,7 +212,7 @@ console.log('\n=== 5. 客户端 bundle ===')
   try {
     runInContext(src, createContext({ ...sandbox, window: sandbox.window }))
     ok('client bundle registers a factory', typeof registered?.factory === 'function')
-    ok('bundle id matches the package name', registered?.id === 'dsh-env-manager', String(registered?.id))
+    ok('bundle id matches the package name', registered?.id === 'dsh-environment-tray', String(registered?.id))
     if (typeof registered?.factory === 'function') {
       const exportsObj = registered.factory(sandbox.require)
       ok('factory materializes and exports apply()', typeof exportsObj.apply === 'function')
@@ -257,7 +257,7 @@ console.log('\n=== 6. 组合配置里我们的行 ===')
 
   if (dumped) {
     const lines = dump.split('\n')
-    const idx = lines.findIndex((l) => l.includes('name: dsh-env-manager'))
+    const idx = lines.findIndex((l) => l.includes('name: dsh-environment-tray'))
     ok('our row appears in the composed tree', idx !== -1)
     if (idx !== -1) {
       // 往前找最近的 id: 行
@@ -287,7 +287,7 @@ console.log('\n=== 6. 组合配置里我们的行 ===')
       }
 
       // 真正要守的是"行没被重复或被别的行顶掉"，而不是"它必须是启用的"
-      const occurrences = lines.filter((l) => l.includes('name: dsh-env-manager')).length
+      const occurrences = lines.filter((l) => l.includes('name: dsh-environment-tray')).length
       ok('exactly one row for our package (no duplicates)', occurrences === 1, String(occurrences))
     }
     // 行数应当比不含我们时多：至少能确认 dump 是完整的

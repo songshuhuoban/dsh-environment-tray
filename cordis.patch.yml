@@ -1,4 +1,4 @@
-# dsh-env-manager bundle patch.
+# dsh-environment-tray bundle patch.
 #
 # A bundle layer's patch is applied in `dsh.profile.bundles` order, before the
 # profile's own cordis.patch.yml. Every row below is an `insert`, so this layer
@@ -33,5 +33,5 @@
 
 - insert:
     - id: env-manager
-      name: dsh-env-manager
+      name: dsh-environment-tray
       disabled: true

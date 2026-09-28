@@ -12,7 +12,7 @@
  *   - 不能占用保留 key：DSH_HOME / DSH_SHELL / DSH_SESSION_ID
  *   - 同一 key 不能被两个贡献者同时拥有（重复会抛错）
  *
- * @module dsh-env-manager
+ * @module dsh-environment-tray
  */
 
 import { readFileSync } from 'node:fs'
@@ -21,6 +21,7 @@ import { credentialAccessOf } from './credentials'
 import { createHostApi, runReg } from './host-api'
 import { OsEnvironmentLayer } from './registry'
 import { createWriteRoutes } from './write-routes'
+import { LiveEnvironment } from './live-environment'
 import type { PluginContext } from './types'
 
 /** 从 `unknown` 抛出的值里安全取 message，避免 `error?.message` 报 TS2339。 */
@@ -155,10 +156,13 @@ export function apply(ctx: PluginContext): void {
   // ── HTTP 面 ────────────────────────────────────────────────────────────────
   // 客户端页签的数据来源。用 ctx.inject 延迟到 webServer 就绪再注册。
   try {
-    const api = createHostApi({ ctx })
+    const osLayer = new OsEnvironmentLayer({ run: runReg })
+    const launch = ctx.get?.('launchEnvironment') as ConstructorParameters<typeof LiveEnvironment>[0]['launch']
+    const runtime = new LiveEnvironment({ osLayer, launch })
+    const api = createHostApi({ ctx, osLayer })
     api.register()
     // 写路由单独注册：爆炸半径大得多，分开让 composition 可以只暴露只读面
-    api.registerWriteRoutes(createWriteRoutes({ ctx, osLayer: new OsEnvironmentLayer({ run: runReg }) }))
+    api.registerWriteRoutes(createWriteRoutes({ ctx, osLayer, runtime }))
   } catch (error) {
     announce(ctx, `host API registration failed: ${errorMessage(error)}`)
   }

@@ -11,16 +11,17 @@
  *  3. **错误要能到达客户端。** `dsh-host-webserver` 对抛出异常的处理器回
  *     一个空的 400，所以这里自己捕获并回结构化错误，让 UI 能说明原因。
  *
- * @module dsh-env-manager/host-api
+ * @module dsh-environment-tray/host-api
  */
 
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
 import { buildEnvironmentModel, BLOCKED_REASON_TEXT } from './env-model'
-import { credentialAccessOf } from './credentials'
+import { credentialAccessOf, isPossibleRef } from './credentials'
+import { readDotEnvFile } from './env-write'
 import { mergeOsLayers, OsEnvironmentLayer, USER_SCOPE, MACHINE_SCOPE } from './registry'
-import { createRequestGuard, CREDENTIAL_ROUTE, ENV_ROUTE, REGISTRY_ROUTE } from './write-routes'
+import { createRequestGuard, readJsonBody, resolveLayerPath, CREDENTIAL_ROUTE, ENV_ROUTE, REGISTRY_ROUTE } from './write-routes'
 
 import type { OsScopeReads } from './registry'
 import type { WriteRouteHandlers } from './write-routes'
@@ -184,6 +185,7 @@ export const HEALTH_ROUTE = '/api/env-manager/health'
 
 /** 密钥状态路由（只报"是否已配置"，永不回值）。 */
 export const CREDENTIAL_STATE_ROUTE = '/api/env-manager/credential-state'
+export const VALUE_ROUTE = '/api/env-manager/value'
 
 /**
  * 摘要素值以便展示。
@@ -368,8 +370,9 @@ export interface HostApiOptions {
   connection?: ConnectionService | undefined
 }
 
-/** 宿主 API：三个读处理器 + 两个注册函数。 */
+/** 宿主 API：列表、逐项读取与路由注册。 */
 export interface HostApi {
+  value(req: IncomingRequest, res: ServerResponse): Promise<void>
   /** GET /api/env-manager/state —— 复合模型视图。 */
   state(req: IncomingRequest, res: ServerResponse): Promise<void>
   /** GET /api/env-manager/credential-state —— 密钥状态（只报"是否已配置"）。 */
@@ -418,6 +421,64 @@ export function createHostApi(options: HostApiOptions): HostApi {
   }
 
   return {
+    /** 完整值只按用户选中的名称和层读取，不进入列表响应。 */
+    async value(req, res) {
+      if (!guard(req, res)) return
+      if (req.method !== 'POST') {
+        res.writeHead(405, { allow: 'POST' })
+        res.end()
+        return
+      }
+      try {
+        const body = await readJsonBody(req)
+        if (typeof body.name !== 'string' || body.name.length === 0 || body.name.includes('\0')) {
+          writeJson(res, 400, { ok: false, error: 'invalid-name', message: '变量名无效' })
+          return
+        }
+        let value: string | undefined
+        let revision: string | undefined
+        const equal = (name: string) => process.platform === 'win32'
+          ? name.toUpperCase() === (body.name as string).toUpperCase()
+          : name === body.name
+        if (body.layer === 'credential') {
+          if (!isPossibleRef(body.name)) {
+            writeJson(res, 400, { ok: false, error: 'invalid-ref', message: '凭据名称无效' })
+            return
+          }
+          if (!ctx.credentials?.resolve) {
+            writeJson(res, 501, { ok: false, error: 'credentials-unavailable', message: '无法读取凭据' })
+            return
+          }
+          value = (await ctx.credentials.resolve(body.name))?.value
+        } else if (body.layer === 'project-env' || body.layer === 'user-env') {
+          const cwd = cwdOf(req)
+          const model = buildEnvironmentModel({ cwd })
+          const file = await readDotEnvFile(resolveLayerPath(body.layer, cwd, model.home))
+          const name = Object.keys(file.values).find(equal)
+          value = name === undefined ? undefined : file.values[name]
+          revision = file.revision
+        } else if (body.layer === 'process') {
+          const name = Object.keys(process.env).find(equal)
+          value = name === undefined ? undefined : process.env[name]
+        } else if (body.layer === USER_SCOPE || body.layer === MACHINE_SCOPE) {
+          const layers = await osLayer.readAll()
+          const scope = layers[body.layer]
+          if (scope.error) throw new Error('无法读取注册表')
+          value = scope.entries.find((entry) => equal(entry.name))?.value
+        } else {
+          writeJson(res, 400, { ok: false, error: 'invalid-layer', message: '环境层无效' })
+          return
+        }
+        if (value === undefined) {
+          writeJson(res, 404, { ok: false, error: 'value-missing', message: '值已不存在' })
+          return
+        }
+        writeJson(res, 200, { ok: true, value, ...(revision === undefined ? {} : { revision }) })
+      } catch {
+        // 原始 provider / parser 错误可能包含值，逐项读取时只给固定错误。
+        writeJson(res, 500, { ok: false, error: 'read-failed', message: '读取失败' })
+      }
+    },
     /** GET /api/env-manager/state —— 复合模型视图。 */
     async state(req, res) {
       if (!guard(req, res)) return
@@ -543,6 +604,7 @@ export function createHostApi(options: HostApiOptions): HostApi {
       const stateHandler = this.state.bind(this)
       const healthHandler = this.health.bind(this)
       const credentialStateHandler = this.credentialState.bind(this)
+      const valueHandler = this.value.bind(this)
 
       return ctx.inject(['webServer'], (scope) => {
         scope.effect(() => {
@@ -550,6 +612,7 @@ export function createHostApi(options: HostApiOptions): HostApi {
             scope.webServer.register({ kind: 'exact', path: STATE_ROUTE, handler: stateHandler }),
             scope.webServer.register({ kind: 'exact', path: HEALTH_ROUTE, handler: healthHandler }),
             scope.webServer.register({ kind: 'exact', path: CREDENTIAL_STATE_ROUTE, handler: credentialStateHandler }),
+            scope.webServer.register({ kind: 'exact', path: VALUE_ROUTE, handler: valueHandler }),
           ]
           return () => {
             for (const dispose of disposers) {

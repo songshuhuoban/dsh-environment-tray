@@ -14,7 +14,7 @@
  *  4. **错误必须结构化到达客户端。** webserver 会把抛出的异常变成**空的** 400，
  *     所以这里自己捕获并回 `{ error, message, problems }`。
  *
- * @module dsh-env-manager/write-routes
+ * @module dsh-environment-tray/write-routes
  */
 
 import { resolve } from 'node:path'
@@ -23,6 +23,8 @@ import { applyEnvEdits, EnvEditRejected, readDotEnvFile } from './env-write'
 import { resolveDshHome } from './env-model'
 import { CredentialAccess, CredentialRejected, CredentialShadowed } from './credentials'
 import { USER_SCOPE, MACHINE_SCOPE } from './registry'
+import type { OsScopeReads } from './registry'
+import type { LiveEnvironment, RuntimeResult } from './live-environment'
 import type {
   ConnectionService,
   CredentialInfo,
@@ -85,7 +87,7 @@ export function createRequestGuard(options: {
       writeJson(res, 503, {
         ok: false,
         error: 'request-policy-unavailable',
-        message: '宿主未提供请求策略服务（ctx.connection），无法校验请求来源；已拒绝以失败关闭',
+        message: '无法验证请求，请重新连接 DSH',
       })
       return false
     }
@@ -98,8 +100,8 @@ export function createRequestGuard(options: {
       error: rejection === 403 ? 'untrusted-origin' : 'unauthenticated',
       message:
         rejection === 403
-          ? '请求未通过 Host/Origin 校验（可能是跨站请求或 DNS rebinding）'
-          : '请求未通过浏览器会话认证',
+          ? '请求来源不受信任'
+          : '请重新连接 DSH',
     })
     return false
   }
@@ -212,7 +214,7 @@ export function toWriteRejected(error: unknown): WriteRejected {
   if (error instanceof EnvEditRejected) {
     // CAS 冲突是 409（可重试），校验失败是 400
     const rejected = error as EnvEditRejected & { code: string; problems?: EnvEditProblem[] }
-    const status = rejected.code === 'stale-revision' ? 409 : 400
+    const status = rejected.code === 'stale-revision' || rejected.code === 'already-exists' ? 409 : 400
     return new WriteRejected(rejected.code, rejected.message, rejected.problems ?? [], status)
   }
   if (error instanceof CredentialShadowed) {
@@ -229,12 +231,14 @@ export function toWriteRejected(error: unknown): WriteRejected {
 /** 本模块用到的 OS 环境层最小接口（真实实现见 `./registry`）。 */
 export interface OsLayerPort {
   readonly supported: boolean
+  readAll?(): Promise<OsScopeReads>
   write(scope: string, name: string, value: string, type?: string): Promise<{ ok: boolean; type?: string; error?: string }>
   remove(scope: string, name: string): Promise<{ ok: boolean; removed?: { name: string; value: string; type: string }; backupUnavailable?: boolean; error?: string }>
 }
 
 /** `createWriteRoutes` 的依赖。 */
 export interface WriteRoutesOptions {
+  runtime?: Pick<LiveEnvironment, 'sync'>
   /** cordis 上下文（只用到 credentials / connection）。 */
   ctx: {
     credentials?: CredentialProvider | undefined
@@ -292,6 +296,15 @@ export function createWriteRoutes(options: WriteRoutesOptions): WriteRouteHandle
     return false
   }
 
+  // Concurrent creates through this plugin must not replace each other.
+  const registryCreates = new Map<string, Promise<Record<string, unknown>>>()
+  const serializeRegistryCreate = async (key: string, write: () => Promise<Record<string, unknown>>) => {
+    const current = (registryCreates.get(key) ?? Promise.resolve()).catch(() => {}).then(write)
+    registryCreates.set(key, current)
+    try { return await current }
+    finally { if (registryCreates.get(key) === current) registryCreates.delete(key) }
+  }
+
   /**
    * 统一写出结果或拒绝。
    *
@@ -326,6 +339,11 @@ export function createWriteRoutes(options: WriteRoutesOptions): WriteRouteHandle
     }
   }
 
+  const syncRuntime = async (layer: string, names: string[], req: IncomingRequest, removed?: { name: string; value: string }): Promise<RuntimeResult> =>
+    options.runtime === undefined
+      ? { appliedToProcess: false, restartRequired: true }
+      : options.runtime.sync({ layer, names, cwd: cwdOf(req), home: homeOf(), removed })
+
   return {
     /**
      * POST /api/env-manager/env —— 批量编辑某个 `.env` 层。
@@ -357,12 +375,14 @@ export function createWriteRoutes(options: WriteRoutesOptions): WriteRouteHandle
           layer: body.layer,
           edits: body.edits as EnvEdit[],
           expectedRevision: body.expectedRevision,
+          createOnly: body.createOnly === true,
         })
         // 只回结构与新 revision，不回全部值（values 可能含敏感项）
         return {
           path: after.path,
           revision: after.revision,
           keys: Object.keys(after.values),
+          ...await syncRuntime(body.layer, (body.edits as EnvEdit[]).map((edit) => edit.name), req),
         }
       })
     },
@@ -402,7 +422,7 @@ export function createWriteRoutes(options: WriteRoutesOptions): WriteRouteHandle
       await respond(res, async () => {
         const access = credentialAccessOfFn()
         if (access === undefined) {
-          throw new WriteRejected('credentials-unavailable', '本 composition 未挂载凭据域，无法管理密钥', [], 501)
+          throw new WriteRejected('credentials-unavailable', '凭据服务不可用', [], 501)
         }
         const body = await readJsonBody(req)
         // 与 `env` 处理器同样的理由：请求体不可信，逐项校验后再交给凭据域。
@@ -435,7 +455,7 @@ export function createWriteRoutes(options: WriteRoutesOptions): WriteRouteHandle
         if (!osLayer.supported) {
           throw new WriteRejected(
             'unsupported-platform',
-            '当前平台不支持通过本插件写 OS 环境变量（Linux/macOS 没有单一可靠的写入点）',
+            '当前平台不支持编辑系统环境变量',
             [],
             501,
           )
@@ -472,19 +492,29 @@ export function createWriteRoutes(options: WriteRoutesOptions): WriteRouteHandle
             ...removed.removed === undefined
               ? { backupUnavailable: true }
               : { undo: { name: removed.removed.name, value: removed.removed.value, type: removed.removed.type } },
-            appliesAfterRestart: true,
+            ...await syncRuntime(scope, [body.name], req, removed.removed),
           }
         }
 
-        const wrote = await osLayer.write(scope, body.name, value, type)
-        if (!wrote.ok) throw new WriteRejected('registry-failed', String(wrote.error), [], 500)
-        return {
-          scope,
-          name: body.name,
-          type: wrote.type,
-          // 如实告知：注册表改动在 DSH 重启前不改变生效值（见设计文档 §17.1）
-          appliesAfterRestart: true,
+        const name = body.name
+        const write = async () => {
+          if (body.createOnly === true) {
+            const current = (await osLayer.readAll?.())?.[scope]
+            if (current === undefined || current.error !== undefined) {
+              throw new WriteRejected('registry-read-failed', '无法读取目标环境变量，未执行新建', [], 500)
+            }
+            if (current.entries.some((entry) => entry.name.toUpperCase() === name.toUpperCase())) {
+              throw new WriteRejected('already-exists', '所选位置中已存在同名变量', [], 409)
+            }
+          }
+          const wrote = await osLayer.write(scope, name, value, type)
+          if (!wrote.ok) throw new WriteRejected('registry-failed', String(wrote.error), [], 500)
+          return {
+            scope, name, type: wrote.type,
+            ...await syncRuntime(scope, [name], req),
+          }
         }
+        return body.createOnly === true ? serializeRegistryCreate(scope + '\0' + name.toUpperCase(), write) : write()
       })
     },
   }

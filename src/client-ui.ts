@@ -23,7 +23,7 @@
  * 需要 `:hover` / `:focus-within` 的部分走一张注入的极小样式表 —— 内联
  * style 表达不了伪类，而引入 CSS 工具链只为一个悬停态不值得。
  *
- * @module dsh-env-manager/client-ui
+ * @module dsh-environment-tray/client-ui
  */
 
 import * as React from 'react'
@@ -69,26 +69,49 @@ const CSS = `
 .dsh-envmgr-dialog { width: min(1080px, calc(100vw - 48px)); max-width: none; }
 .dsh-envmgr-row {
   display: grid;
-  grid-template-columns: minmax(140px, 260px) minmax(0, 1fr) auto;
-  align-items: baseline;
+  grid-template-columns: minmax(140px, 260px) minmax(0, 1fr) 220px;
+  align-items: center;
   column-gap: 12px;
   padding: 5px 8px;
   border-radius: 6px;
 }
 .dsh-envmgr-row:hover { background: var(--dsw-alias-fill-quaternary, rgba(128,128,128,0.10)); }
 .dsh-envmgr-actions { opacity: 0; transition: opacity .12s ease; }
+.dsh-envmgr-row-meta { display: grid; grid-template-columns: minmax(0, 1fr) 88px; align-items: center; gap: 8px; min-width: 0; }
+.dsh-envmgr-row-meta > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.dsh-envmgr-actions { display: grid; grid-template-columns: repeat(3, 28px); gap: 2px; min-height: 28px; }
+.dsh-envmgr-actions button, .dsh-envmgr-value > button { width: 28px; height: 28px; padding: 0; }
 .dsh-envmgr-row:hover .dsh-envmgr-actions,
 .dsh-envmgr-row:focus-within .dsh-envmgr-actions { opacity: 1; }
 @media (hover: none) { .dsh-envmgr-actions { opacity: 1; } }
 .dsh-envmgr-scroll { max-height: min(62vh, 760px); overflow-y: auto; overscroll-behavior: contain; }
 .dsh-envmgr-valuecell { min-width: 0; }
-.dsh-envmgr-valuecell:hover { text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
+.dsh-envmgr-value { display: grid; grid-template-columns: minmax(0, 1fr) repeat(2, 28px); align-items: center; gap: 2px; font-family: ${MONO}; }
+.dsh-envmgr-input { width: 100%; min-width: 0; box-sizing: border-box; padding: 4px 6px; border: 1px solid var(--dsw-alias-border-l2, rgba(128,128,128,.22)); border-radius: 5px; background: transparent; color: inherit; font: inherit; }
+.dsh-envmgr-input:focus { outline: 1px solid currentColor; outline-offset: -1px; }
+.dsh-envmgr-input:is(textarea) { resize: vertical; }
+.dsh-envmgr-input[aria-invalid=true] { border-color: var(--dsw-alias-text-error, #c33); }
+.dsh-envmgr-value-error { grid-column: 1 / -1; font-family: sans-serif; }
+.dsh-envmgr-editor { display: flex; align-items: center; gap: 6px; padding: 2px 8px 6px; }
+.dsh-envmgr-layers { margin: 2px 0 6px; box-shadow: inset 2px 0 var(--dsw-alias-border-l2, rgba(128,128,128,.22)); }
+.dsh-envmgr-create { margin: 8px 0 12px; padding: 12px; border: 1px solid var(--dsw-alias-border-l2, rgba(128,128,128,.22)); border-radius: 6px; font-size: 12px; }
+.dsh-envmgr-create-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 10px; }
+.dsh-envmgr-create label { display: grid; gap: 5px; min-width: 0; }
+.dsh-envmgr-create-value { grid-column: 1 / -1; }
+.dsh-envmgr-create-value > span { display: flex; align-items: start; gap: 6px; }
+.dsh-envmgr-create select, .dsh-envmgr-create textarea { font: inherit; }
+.dsh-envmgr-create option { background: var(--dsw-alias-fill-primary, Canvas); color: var(--dsw-alias-text-primary, CanvasText); }
+.dsh-envmgr-form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.dsh-envmgr-confirm { width: min(440px, calc(100vw - 32px)); }
+.dsh-envmgr-confirm p { overflow-wrap: anywhere; font-size: 13px; }
 
 /* 窄屏：KEY 与注解一行，VALUE 独占下一行 —— 竖着扫仍然成立，且不再横向溢出 */
 @media (max-width: 760px) {
   .dsh-envmgr-dialog { width: calc(100vw - 16px); }
-  .dsh-envmgr-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 2px; }
-  .dsh-envmgr-valuecell { grid-column: 1 / -1; }
+  .dsh-envmgr-row { grid-template-columns: minmax(0, 1fr) 180px; row-gap: 2px; }
+  .dsh-envmgr-row > .dsh-envmgr-valuecell { grid-column: 1 / -1; grid-row: 2; }
+  .dsh-envmgr-row > .dsh-envmgr-row-meta { grid-column: 2; grid-row: 1; }
+  .dsh-envmgr-create-fields { grid-template-columns: minmax(0, 1fr); }
 }
 `
 
@@ -100,7 +123,8 @@ const CSS = `
  */
 export function installClientStyles(): void {
   if (typeof document === 'undefined') return
-  if (document.getElementById(STYLE_ID) !== null) return
+  const existing = document.getElementById(STYLE_ID)
+  if (existing !== null) { existing.textContent = CSS; return }
   const style = document.createElement('style')
   style.id = STYLE_ID
   style.textContent = CSS
@@ -116,11 +140,12 @@ export function installClientStyles(): void {
  * KEY 用 `minmax(140px, 260px)`：短名字不浪费空间，遇到
  * `HUOSHAN_DOUBAO_ACCESS_TOKEN` 这种长名字也不会把 VALUE 挤没。
  */
-export function Row(props: { children?: React.ReactNode; active?: boolean }): React.ReactElement {
+export function Row(props: { children?: React.ReactNode; active?: boolean; onBlur?: React.FocusEventHandler<HTMLDivElement> }): React.ReactElement {
   return React.createElement(
     'div',
     {
       className: 'dsh-envmgr-row',
+      onBlur: props.onBlur,
       style: {
         background: props.active === true ? 'var(--dsw-alias-fill-quaternary, rgba(128,128,128,0.10))' : 'transparent',
       },
@@ -133,8 +158,8 @@ export function Row(props: { children?: React.ReactNode; active?: boolean }): Re
 export function RowActions(props: { children?: React.ReactNode }): React.ReactElement {
   return React.createElement(
     'span',
-    { className: 'dsh-envmgr-actions', style: { display: 'inline-flex', alignItems: 'center', gap: '2px' } },
-    props.children,
+    { className: 'dsh-envmgr-actions' },
+    props.children ?? [React.createElement('span', { key: 0 }), React.createElement('span', { key: 1 }), React.createElement('span', { key: 2 })],
   )
 }
 
@@ -159,15 +184,14 @@ export function Key(props: { children?: React.ReactNode; title?: string }): Reac
 /**
  * VALUE：另一个主角。等宽、可省略。
  *
- * `masked` 用点阵表示"宿主不回传这个值" —— 这比空白更能说明状态。
- * 两类情况会走到这里：凭据域（契约上根本没有值可给），以及用户没有打开
- * 「显示敏感值」时宿主按名字屏蔽的值（见设计文档 §33）。
+ * `masked` 用点阵显示隐藏状态；临时打开的完整值可以换行。
  */
 export function Value(props: {
   children?: React.ReactNode
   title?: string
   onClick?: () => void
   masked?: boolean
+  expanded?: boolean
 }): React.ReactElement {
   return React.createElement(
     'span',
@@ -179,7 +203,8 @@ export function Value(props: {
         fontFamily: MONO,
         overflow: 'hidden',
         textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
+        whiteSpace: props.expanded ? 'pre-wrap' : 'nowrap',
+        ...(props.expanded ? { overflowWrap: 'anywhere' } as const : {}),
         ...(props.onClick === undefined ? {} : { cursor: 'pointer' }),
       },
       ...(props.title === undefined ? {} : { title: props.title }),
@@ -192,8 +217,7 @@ export function Value(props: {
 /** 注解：一行里跟在 VALUE 后面的全部次要信息，用 `·` 连接。 */
 export function Meta(props: { parts: readonly (string | null | undefined)[] }): React.ReactElement | null {
   const text = props.parts.filter((p): p is string => typeof p === 'string' && p.length > 0).join(' · ')
-  if (text.length === 0) return null
-  return React.createElement('span', { style: { ...T.meta, whiteSpace: 'nowrap' } }, text)
+  return React.createElement('span', { style: { ...T.meta, whiteSpace: 'nowrap' }, title: text }, text)
 }
 
 /** 分组标题：小字 + 一条细横线 + 计数。横向规则把视线按组切开。 */

@@ -88,7 +88,7 @@ if ($SkipProbe) {
     if (Test-Path $src) { Copy-Item $src (Join-Path "$probeHome\profiles\web" $f) -Force }
   }
   New-Item -ItemType Junction -Path "$probeHome\profiles\node_modules" -Target (Join-Path $env:USERPROFILE '.dsh\profiles\node_modules') -ErrorAction SilentlyContinue | Out-Null
-  New-Item -ItemType Junction -Path "$probeHome\profiles\web\node_modules\dsh-env-manager" -Target $ws -ErrorAction SilentlyContinue | Out-Null
+  New-Item -ItemType Junction -Path "$probeHome\profiles\web\node_modules\dsh-environment-tray" -Target $ws -ErrorAction SilentlyContinue | Out-Null
 
   $env:DSH_HOME = $probeHome
   $logFile = Join-Path $env:TEMP 'probe-post.log'
@@ -197,9 +197,9 @@ console.log('spawned pid ' + String(child.pid) + ' via ' + bin)
     $idxBytes = if (Test-Path $idxFile) { (Get-Item $idxFile).Length } else { 0 }
     Check 'the index rendered (non-empty)' ($idxBytes -gt 1000) "got $idxBytes bytes"
     $idx = if (Test-Path $idxFile) { Get-Content $idxFile -Raw } else { '' }
-    Check 'client bundle is in the boot graph' ($idx -match 'dsh-env-manager/client\.js') 'not found in index'
-    if ($idx -match 'dsh-env-manager/client\.js') {
-      Note 'client bundle present' 'dsh-env-manager/client.js 已在应用组合 URL 中'
+    Check 'client bundle is in the boot graph' ($idx -match 'dsh-environment-tray/client\.js') 'not found in index'
+    if ($idx -match 'dsh-environment-tray/client\.js') {
+      Note 'client bundle present' 'dsh-environment-tray/client.js 已在应用组合 URL 中'
     }
     Remove-Item -Force $idxFile -ErrorAction SilentlyContinue
   }

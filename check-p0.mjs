@@ -132,7 +132,7 @@ globalThis.window = {
 await import(pathToFileURL(resolve('lib/client.js')).href)
 
 ok('bundle registered a factory', typeof registered?.factory === 'function')
-ok('bundle id is the package name', registered?.id === 'dsh-env-manager', String(registered?.id))
+ok('bundle id is the package name', registered?.id === 'dsh-environment-tray', String(registered?.id))
 ok(
   'factory is lazy (body not run at registration)',
   factoryRanDuringRegistration === false,
@@ -170,7 +170,7 @@ const fakeRequire = (spec) => {
       Modal: ({ open, children }) => (open === true ? { type: 'div', props: { 'data-modal': 'open' }, children: [children] } : null),
       DisclosureRow: () => null,
       IconChevronDownOutline14: () => null,
-      IconContextInjectionOutline16: () => null,
+      IconSettingsOutline16: () => null,
       IconEditOutline16: () => null,
       IconRefreshOutline16: () => null,
       IconSearchOutline16: () => null,
@@ -192,6 +192,8 @@ ok(
 const registrations = []
 const injections = []
 const fakeClientCtx = {
+  effect: (callback) => callback(),
+  locale: { register: () => () => {} },
   slots: {
     inject(name, callback) {
       injections.push(name)
@@ -229,7 +231,7 @@ ok('entry component is a function', typeof registrations[0]?.component === 'func
 
 // 渲染一次，确认组件本身不炸。fake hooks 里 useState 返回初始值，
 // 所以模态框停在关闭态 —— 入口按钮必须仍然渲染出来。
-const rendered = registrations[0].component({})
+const rendered = registrations[0].component({ t: (key) => key === 'title' ? '环境变量' : key })
 ok('entry component renders without throwing', rendered !== null && rendered !== undefined)
 {
   const flat = []
@@ -273,8 +275,8 @@ console.log('\n--- client inject export (regression) ---')
   const manifest = JSON.parse(readFileSync(resolve('package.json'), 'utf8'))
   ok('dsh.client.platform is web', manifest.dsh?.client?.platform === 'web', String(manifest.dsh?.client?.platform))
   ok(
-    'package.json does NOT carry a client inject (that is a different mechanism)',
-    manifest.dsh?.client?.inject === undefined,
+    'package.json declares the native locale package in the client boot graph',
+    JSON.stringify(manifest.dsh?.client?.inject) === '["@deepseek-ai/dsh-client-locale"]',
     JSON.stringify(manifest.dsh?.client?.inject),
   )
 
@@ -282,8 +284,8 @@ console.log('\n--- client inject export (regression) ---')
   ok('client bundle exports inject', Array.isArray(clientExports.inject), typeof clientExports.inject)
   ok('inject declares the slots service', clientExports.inject?.includes('slots') === true, JSON.stringify(clientExports.inject))
   ok(
-    'inject declares only slots (slot readiness is handled by slots.inject)',
-    clientExports.inject?.length === 1,
+    'inject declares slots and locale services',
+    clientExports.inject?.length === 2 && clientExports.inject?.includes('locale'),
     JSON.stringify(clientExports.inject),
   )
 
@@ -315,7 +317,7 @@ console.log('\n--- client inject export (regression) ---')
   const makeStrictCtx = (services, declared) =>
     new Proxy(services, {
       get(target, prop) {
-        if (typeof prop === 'string' && prop !== 'then' && !declared.includes(prop)) {
+        if (typeof prop === 'string' && prop !== 'then' && prop !== 'effect' && !declared.includes(prop)) {
           throw new Error(`cannot get property "${prop}" without inject`)
         }
         return target[prop]
@@ -323,10 +325,11 @@ console.log('\n--- client inject export (regression) ---')
     })
 
   const slotsImpl = { inject: () => {}, register: () => () => {} }
+  const clientServices = { slots: slotsImpl, locale: { register: () => () => {} }, effect: (fn) => fn() }
 
   let threwDeclared
   try {
-    clientExports.apply(makeStrictCtx({ slots: slotsImpl }, clientExports.inject))
+    clientExports.apply(makeStrictCtx(clientServices, clientExports.inject))
   } catch (error) {
     threwDeclared = error
   }
@@ -335,7 +338,7 @@ console.log('\n--- client inject export (regression) ---')
   // 反向：不声明必须抛 —— 证明这个替身真的在检查（否则上面的 PASS 毫无意义）
   let threwUndeclared
   try {
-    clientExports.apply(makeStrictCtx({ slots: slotsImpl }, []))
+    clientExports.apply(makeStrictCtx(clientServices, []))
   } catch (error) {
     threwUndeclared = error
   }

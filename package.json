@@ -1,8 +1,13 @@
 {
-  "name": "dsh-env-manager",
-  "version": "0.0.1",
-  "private": true,
-  "description": "Manage the DeepSeek Harness environment from the Web UI: layered .env files, runtime DSH_* variables, credentials, and OS user-level variables.",
+  "name": "dsh-environment-tray",
+  "version": "0.1.0",
+  "description": "Manage DeepSeek Harness environment variables and credentials from the Web UI.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/songshuhuoban/dsh-environment-tray.git"
+  },
+  "homepage": "https://github.com/songshuhuoban/dsh-environment-tray#readme",
+  "bugs": "https://github.com/songshuhuoban/dsh-environment-tray/issues",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -11,24 +16,29 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "lib/index.js",
-    "lib/client.js",
-    "cordis.patch.yml"
+    "lib/*.js",
+    "cordis.patch.yml",
+    "docs/*.md"
   ],
   "scripts": {
     "build": "tsdown",
     "watch": "tsdown --watch",
     "typecheck": "tsc --noEmit",
-    "test": "pnpm run build && node check-p0.mjs && node verify-env-model.mjs && node verify-env-write.mjs && node verify-credentials.mjs && node verify-host-api.mjs && node verify-registry.mjs && node verify-registry-roundtrip.mjs && node verify-write-routes.mjs && node audit-hostile-input.mjs && node verify-client-ui.mjs",
+    "test": "pnpm run build && node check-p0.mjs && node verify-env-model.mjs && node verify-env-write.mjs && node verify-credentials.mjs && node verify-host-api.mjs && node verify-registry.mjs && node verify-registry-roundtrip.mjs && node verify-write-routes.mjs && node audit-hostile-input.mjs && node verify-client-ui.mjs && node verify-live-environment.mjs",
     "test:parity": "node verify-build-parity.mjs",
-    "preflight": "node preflight.mjs"
+    "preflight": "node preflight.mjs",
+    "prepack": "pnpm run build",
+    "package:check": "node scripts/verify-package.mjs",
+    "release:check": "pnpm run typecheck && pnpm test && node audit-readme.mjs && pnpm run package:check",
+    "prepublishOnly": "pnpm run release:check"
   },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
     },
     "client": {
-      "platform": "web"
+      "platform": "web",
+      "inject": ["@deepseek-ai/dsh-client-locale"]
     }
   },
   "peerDependencies": {
@@ -41,5 +51,9 @@
     "tsdown": "^0.23.0",
     "typescript": "^5.9.3"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  }
 }

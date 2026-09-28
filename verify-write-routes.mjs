@@ -353,7 +353,7 @@ console.log('\n--- credential write route ---')
   const noCredRes = fakeRes()
   await noCredRoutes.credentials(postReq(CREDENTIAL_ROUTE, { ref: 'K', value: 'v' }), noCredRes)
   ok('absent credential domain yields 501', noCredRes.captured.status === 501, String(noCredRes.captured.status))
-  ok('absent credential domain explains itself', String(noCredRes.captured.json?.message).includes('未挂载'), String(noCredRes.captured.json?.message))
+  ok('absent credential domain explains itself', noCredRes.captured.json?.message === '凭据服务不可用', String(noCredRes.captured.json?.message))
 }
 
 // ── 6. 注册表写路由 ─────────────────────────────────────────────────────────
@@ -379,7 +379,7 @@ console.log('\n--- registry write route ---')
   ok('registry type is passed through', calls[0]?.type === 'REG_EXPAND_SZ', JSON.stringify(calls[0]))
   ok(
     'response warns that it applies after restart',
-    writeRes.captured.json?.appliesAfterRestart === true,
+    writeRes.captured.json?.restartRequired === true,
     JSON.stringify(writeRes.captured.json),
   )
 
@@ -399,7 +399,7 @@ console.log('\n--- registry write route ---')
   await regRoutes.registry(postReq(REGISTRY_ROUTE, { scope: USER_SCOPE, name: 'MY_VAR', unset: true }), unsetRes)
   ok('registry unset returns 200', unsetRes.captured.status === 200)
   ok('registry unset called remove', calls.some((c) => c.kind === 'remove' && c.name === 'MY_VAR'))
-  ok('registry unset warns that it applies after restart', unsetRes.captured.json?.appliesAfterRestart === true)
+  ok('registry unset warns when no runtime synchronizer exists', unsetRes.captured.json?.restartRequired === true)
 
   // 撤销能力：宿主必须回传被删的原值与类型（删除注册表值没有回收站）
   {
@@ -530,7 +530,7 @@ console.log('\n--- request policy guard ---')
     const allowed = createRequestGuard({ connection: undefined })({ headers: authedHeaders }, res)
     ok('missing connection fails closed', allowed === false)
     ok('fail-closed status is 503', res.captured.status === 503, String(res.captured.status))
-    ok('fail-closed explains itself', String(res.captured.json?.message).includes('失败关闭'), String(res.captured.json?.message))
+    ok('fail-closed explains itself', res.captured.json?.message === '无法验证请求，请重新连接 DSH', String(res.captured.json?.message))
   }
 
   ok('connection without requestRejection also fails closed', createRequestGuard({ connection: {} })({ headers: authedHeaders }, fakeRes()) === false)
@@ -568,6 +568,46 @@ console.log('\n--- request policy guard ---')
     const envText = existsSync(join(projectDir, '.env')) ? readFileSync(join(projectDir, '.env'), 'utf8') : ''
     ok('guarded request wrote no new key', !envText.includes('GUARD_TEST'), JSON.stringify(envText))
   }
+}
+
+console.log('\n--- create-only registry ---')
+{
+  const values = new Map([['EXISTING', { name: 'Existing', value: 'original', type: 'REG_SZ' }]])
+  let writes = 0
+  let readError = false
+  const creationRoutes = createWriteRoutes({ ctx: {}, guard: () => true, osLayer: {
+    supported: true,
+    async readAll() { return {
+      [USER_SCOPE]: { entries: [...values.values()], error: readError ? 'failed' : undefined },
+      [MACHINE_SCOPE]: { entries: [] },
+    } },
+    async write(scope, name, value, type) {
+      await Promise.resolve(); writes++
+      values.set(name.toUpperCase(), { name, value, type })
+      return { ok: true, type }
+    },
+    async remove() { return { ok: true } },
+  } })
+  const create = async (name, value) => {
+    const response = fakeRes()
+    await creationRoutes.registry(postReq(REGISTRY_ROUTE, { scope: USER_SCOPE, name, value, type: 'REG_SZ', createOnly: true }), response)
+    return response
+  }
+  const duplicate = await create('eXISTING', 'bad')
+  ok('registry creation rejects case-insensitive duplicates', duplicate.captured.status === 409 && json(duplicate).error === 'already-exists')
+  ok('a duplicate registry create never writes or changes the value', writes === 0 && values.get('EXISTING').value === 'original')
+  const created = await create('Fresh', '')
+  ok('registry creation accepts a new empty string value', created.captured.status === 200 && values.get('FRESH').value === '')
+  ok('new registry entries preserve the requested type', values.get('FRESH').type === 'REG_SZ')
+  const race = await Promise.all([create('Race', 'first'), create('rACE', 'second')])
+  ok('concurrent registry creates have one winner and one conflict', race.filter((response) => response.captured.status === 200).length === 1 && race.filter((response) => response.captured.status === 409).length === 1)
+  ok('a losing registry create never replaces the winner', values.get('RACE').value === 'first' && writes === 2)
+  readError = true
+  const failed = await create('ReadFailure', 'x')
+  ok('registry creation fails closed when the target cannot be read', failed.captured.status === 500 && json(failed).error === 'registry-read-failed' && writes === 2)
+  readError = false
+  const retry = await create('ReadFailure', 'recovered')
+  ok('a failed creation does not poison the creation lock', retry.captured.status === 200 && values.get('READFAILURE').value === 'recovered')
 }
 
 rmSync(scratch, { recursive: true, force: true })

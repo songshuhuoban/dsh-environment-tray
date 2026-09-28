@@ -230,7 +230,9 @@ ok('denylist has 49 entries (matches BOOTSTRAP_NAMES)', BOOTSTRAP_NAMES.size ===
 
 // ── 4. 真实机器快照 ─────────────────────────────────────────────────────────
 console.log('\n--- live model on this machine ---')
-const model = buildEnvironmentModel({ cwd: process.cwd() })
+const model = buildEnvironmentModel({ cwd: process.cwd(), env: {
+  ...process.env, DSH_SHELL: process.env.DSH_SHELL ?? 'test-shell',
+} })
 console.log(`cwd            : ${model.cwd}`)
 console.log(`DSH home       : ${model.home}`)
 console.log(`project .env   : ${model.projectFile?.path ?? '(absent)'}`)

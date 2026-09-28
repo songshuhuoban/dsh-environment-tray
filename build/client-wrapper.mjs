@@ -27,7 +27,7 @@
  * 因此与已验证可用的第一方 bundle 行为一致；这一点属于**形状对齐**，
  * 不属于我实测过的结论。
  *
- * @module dsh-env-manager/tsdown-client-wrapper
+ * @module dsh-environment-tray/tsdown-client-wrapper
  */
 
 import { readFileSync, writeFileSync } from 'node:fs'

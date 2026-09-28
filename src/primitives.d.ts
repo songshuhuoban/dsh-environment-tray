@@ -25,7 +25,7 @@
  * 只声明本插件用到的成员。加新成员时**先回上面那份实现里核对 props**，
  * 不要凭名字猜。
  *
- * @module dsh-env-manager/primitives
+ * @module dsh-environment-tray/primitives
  */
 
 declare module '@deepseek-ai/dsh-client-ui-primitives' {
@@ -85,9 +85,15 @@ declare module '@deepseek-ai/dsh-client-ui-primitives' {
     rowClassName?: string
   }>
 
-  /* ── 图标：均为 16px（`14` 结尾的是 14px）线性图标 ── */
+  /* DSH 0.1.7 uses stroke variants; 0.1.5 uses size-suffixed names. */
+  export const IconChevronDownOutlineRegular: React.ComponentType<{ size?: number; className?: string }>
+  export const IconSlidersTwoOutlineRegular: React.ComponentType<{ size?: number; className?: string }>
+  export const IconEditOutlineRegular: React.ComponentType<{ size?: number; className?: string }>
+  export const IconRefreshOutlineRegular: React.ComponentType<{ size?: number; className?: string }>
+  export const IconSearchOutlineRegular: React.ComponentType<{ size?: number; className?: string }>
+  export const IconTrashOutlineRegular: React.ComponentType<{ size?: number; className?: string }>
   export const IconChevronDownOutline14: React.ComponentType<{ size?: number; className?: string }>
-  export const IconContextInjectionOutline16: React.ComponentType<{ size?: number; className?: string }>
+  export const IconSettingsOutline16: React.ComponentType<{ size?: number; className?: string }>
   export const IconEditOutline16: React.ComponentType<{ size?: number; className?: string }>
   export const IconRefreshOutline16: React.ComponentType<{ size?: number; className?: string }>
   export const IconSearchOutline16: React.ComponentType<{ size?: number; className?: string }>

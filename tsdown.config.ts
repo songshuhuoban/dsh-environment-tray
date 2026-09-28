@@ -27,6 +27,7 @@ export default defineConfig([
       registry: 'src/registry.ts',
       'host-api': 'src/host-api.ts',
       'write-routes': 'src/write-routes.ts',
+      'live-environment': 'src/live-environment.ts',
     },
     outDir: 'lib',
     format: 'esm',
@@ -84,7 +85,7 @@ export default defineConfig([
     },
     plugins: [
       clientBundleWrapper({
-        id: 'dsh-env-manager',
+        id: 'dsh-environment-tray',
         chunk: 'client.js',
         external: ['react', 'react/jsx-runtime', '@deepseek-ai/dsh-client-ui-primitives'],
       }),

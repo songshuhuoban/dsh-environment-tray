@@ -20,7 +20,7 @@
  * ⚠️ 注意：`reg.exe` 的输出是**控制台代码页**编码（本机实测 GBK 系），
  * 所以解码必须走 `cmd /c chcp 65001` 或按 UTF-8 宽松解码。见 `decodeRegOutput`。
  *
- * @module dsh-env-manager/registry
+ * @module dsh-environment-tray/registry
  */
 
 import type { CompositeVariable, EnvironmentModel } from './types'

@@ -11,9 +11,9 @@
  * ── 为什么凭证相关类型是手写的 ──────────────────────────────────────────────
  *
  * `dsh-credentials` 的契约刻意让 `describe()` 的返回类型"没有可以搭载值的位置"。
- * 这里照抄那个形状，**不引入任何可以承载密钥的字段** —— 类型层面就不给泄露留位。
+ * 状态描述不含值；显式逐项查看通过独立的 resolve 调用读取。
  *
- * @module dsh-env-manager/types
+ * @module dsh-environment-tray/types
  */
 
 /* ────────────────────────── HTTP 面 ────────────────────────── */
@@ -94,8 +94,9 @@ export interface CredentialRecordEntry {
   kind: string
 }
 
-/** `ctx.credentials` 的最小接口 —— 刻意**不声明** `resolve`。 */
+/** 默认状态只读 describe；用户逐项查看时才调用 resolve。 */
 export interface CredentialProvider {
+  resolve?(ref: string): Promise<{ value: string; source?: CredentialSource } | undefined>
   describe(ref: string): Promise<CredentialInfo>
   set(ref: string, value: string): Promise<void>
   unset(ref: string): Promise<void>

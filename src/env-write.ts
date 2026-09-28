@@ -16,7 +16,7 @@
  * 写入是**整文件原子替换**（同目录临时文件 + rename），所以一次多键编辑
  * 天然是全有或全无 —— rename 本身不会中途失败。
  *
- * @module dsh-env-manager/env-write
+ * @module dsh-environment-tray/env-write
  */
 
 import { createHash, randomUUID } from 'node:crypto'
@@ -220,12 +220,12 @@ export function validateEdit(name: string, layer: unknown, value: string): EnvEd
     } else if (isProxy) {
       problems.push({
         code: 'proxy-not-in-home',
-        message: `代理变量只能写在 $DSH_HOME/.env；项目 .env 会随仓库分发。请导出 ${name}，或写到 home 层`,
+        message: `${name} 只能写入用户 .env`,
       })
     } else {
       problems.push({
         code: 'bootstrap-only',
-        message: `"${name}" 只能由启动环境提供（它决定进程如何启动、代码与指令从哪加载、如何访问网络）。写进 .env 会导致 DSH 拒绝启动。请改为导出 ${name}，而不是放进 .env 文件`,
+        message: `${name} 不能写入 .env，请在启动 DSH 前设置`,
       })
     }
   }
@@ -463,6 +463,8 @@ export interface ApplyEnvEditsOptions {
   edits: unknown
   /** 客户端读到的 revision；不匹配即拒绝（同样来自请求体，只参与相等比较）。 */
   expectedRevision?: unknown
+  /** Reject existing names instead of replacing them; checked under the path lock. */
+  createOnly?: boolean
 }
 
 /**
@@ -507,6 +509,12 @@ export async function applyEnvEdits(options: ApplyEnvEditsOptions): Promise<DotE
   return withPathLock(path, async () => {
     // 2. CAS：版本不匹配就拒绝，绝不覆盖并发修改
     const current = await readDotEnvFile(path)
+    if (options.createOnly === true) {
+      const names = new Set(Object.keys(current.values).map(editKey))
+      if (list.some((edit) => names.has(editKey(edit.name)))) {
+        throw new EnvEditRejected('already-exists', '所选位置中已存在同名变量')
+      }
+    }
     if (expectedRevision !== undefined && expectedRevision !== current.revision) {
       throw new EnvEditRejected(
         'stale-revision',

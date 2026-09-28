@@ -449,6 +449,26 @@ console.log('\n--- revision semantics ---')
   ok('different content yields different revision', revisionOf('/x', 'A=1\n') !== revisionOf('/x', 'A=2\n'))
 }
 
+console.log('\n--- create-only ---')
+{
+  const createFile = join(scratch, 'create-only.env')
+  const first = await applyEnvEdits({ path: createFile, layer: 'user-env', createOnly: true, expectedRevision: 'absent', edits: [{ op: 'set', name: 'NewVar', value: '' }] })
+  ok('create-only accepts an empty value in a new file', first.values.NewVar === '')
+  const original = readFileSync(createFile, 'utf8')
+  const duplicate = await applyEnvEdits({ path: createFile, layer: 'user-env', createOnly: true, expectedRevision: first.revision, edits: [{ op: 'set', name: 'NewVar', value: 'overwrite' }] }).catch((error) => error)
+  ok('create-only rejects an existing name with a stable code', duplicate.code === 'already-exists')
+  ok('duplicate creation preserves the original file byte for byte', readFileSync(createFile, 'utf8') === original)
+  const partial = await applyEnvEdits({ path: createFile, layer: 'user-env', createOnly: true, edits: [{ op: 'set', name: 'OtherVar', value: 'new' }, { op: 'set', name: 'NewVar', value: 'bad' }] }).catch((error) => error)
+  ok('a create batch with one duplicate performs no partial write', partial.code === 'already-exists' && readFileSync(createFile, 'utf8') === original)
+  const caseName = process.platform === 'win32' ? 'NEWVAR' : 'NewVar'
+  const caseDuplicate = await applyEnvEdits({ path: createFile, layer: 'user-env', createOnly: true, edits: [{ op: 'set', name: caseName, value: 'bad' }] }).catch((error) => error)
+  ok('create-only follows the platform key matching rules', caseDuplicate.code === 'already-exists')
+  const competing = await Promise.allSettled(['first', 'second'].map((value) => applyEnvEdits({ path: createFile, layer: 'user-env', createOnly: true, edits: [{ op: 'set', name: 'ConcurrentVar', value }] })))
+  ok('concurrent create-only calls cannot replace each other', competing.filter((result) => result.status === 'fulfilled').length === 1 && competing.filter((result) => result.status === 'rejected' && result.reason.code === 'already-exists').length === 1)
+  const updated = await applyEnvEdits({ path: createFile, layer: 'user-env', edits: [{ op: 'set', name: 'NewVar', value: 'edited' }] })
+  ok('ordinary edits still replace an existing value', updated.values.NewVar === 'edited')
+}
+
 rmSync(scratch, { recursive: true, force: true })
 
 // ── 15. 大小写：Windows 上环境名不区分大小写 ─────────────────────────────────

@@ -294,7 +294,7 @@ const apiWithOs = createHostApi({ ctx: apiCtx, osLayer: fakeOsLayer, guard: () =
 
 api.register()
 
-ok('three routes registered', registeredRoutes.length === 3, String(registeredRoutes.length))
+ok('four routes registered', registeredRoutes.length === 4, String(registeredRoutes.length))
 ok('state route path is correct', registeredRoutes.some((r) => r.path === STATE_ROUTE), registeredRoutes.map((r) => r.path).join(','))
 ok('health route path is correct', registeredRoutes.some((r) => r.path === HEALTH_ROUTE))
 ok('credential-state route path is correct', registeredRoutes.some((r) => r.path === CREDENTIAL_STATE_ROUTE))
