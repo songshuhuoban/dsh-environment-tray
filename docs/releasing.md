@@ -1,21 +1,19 @@
 # 发布 `dsh-environment-tray`
 
-插件的 npm 包名是 `dsh-environment-tray`，用户可见名称是 **DSH Environment Tray（环境变量管理器）**。`env-manager` 是现有 Cordis 行 ID，升级时保持稳定。npm 包随附构建好的 Host 与 Web Client，用户安装时不需要允许构建脚本。
+插件的 npm 包名是 `dsh-environment-tray`，用户可见名称是 **DSH Environment Tray（环境变量管理器）**。`env-manager` 是 Cordis 行 ID，升级时保持稳定。发布包内有已构建的 Host 和 Web Client，安装者无需构建 TypeScript。
 
-## 发布凭证
+## 分工
 
-GitHub 仓库是 [`songshuhuoban/dsh-environment-tray`](https://github.com/songshuhuoban/dsh-environment-tray)。工作流从仓库 Secret `NPM_TOKEN` 读取 npm 发布凭证，并在 `npm publish` 步骤作为 `NODE_AUTH_TOKEN` 提供给 npm。发布者本机的用户级环境变量不会自动进入 GitHub Actions，需将其值单独保存为同名仓库 Secret。不要把 token 写入仓库、`.npmrc` 或命令行参数。
+GitHub 的 [`Release checks`](https://github.com/songshuhuoban/dsh-environment-tray/blob/master/.github/workflows/release-check.yml) 工作流只在 `master` 推送或 PR 时运行类型检查、测试、README 审计与 npm 打包清单检查。**它不发布到 npm，也不读取 `NPM_TOKEN`。** 发布由维护者在本机运行 `npm publish`，完成 npm 要求的浏览器验证或一次性验证码。不要把 npm token、OTP 或会话凭证写入仓库。
 
-首次发布前用 npm 官方 registry 验证 token。可在临时的 `.npmrc` 中只写 `//registry.npmjs.org/:_authToken=${NPM_TOKEN}`，通过 `npm whoami --registry=https://registry.npmjs.org/` 检查，随后移除该临时文件。若返回 401，先更新 token。需要能够发布该包的 npm 凭证；在 GitHub Actions 中使用时还需符合 npm 对自动发布和双重验证的要求。参考 [GitHub 的 npm 发布说明](https://docs.github.com/en/actions/tutorials/publish-packages/publish-nodejs-packages) 与 [npm 访问令牌说明](https://docs.npmjs.com/about-access-tokens/)。
+当前 npm 包尚未首发。仓库此前的 `v0.1.0` 标签触发过一次自动发布，但 npm 返回 `EOTP`，没有发布任何版本。手动发布成功后再创建版本标签。
 
-## 发布新版本
+## 首次发布与后续版本
 
-1. 确认 npm 上 `dsh-environment-tray` 的发布权；首次发布前运行 `npm view dsh-environment-tray version --registry=https://registry.npmjs.org/`。首次发布时返回 404 是正常的，若已被他人占用则先调整包名及 bundle 引用。
-2. 更新 `package.json` 的 `version` 与变更说明，提交源码和生成的 `lib/`。保持 `cordis.patch.yml` 的包名与 `tsdown.config.ts` 的客户端 bundle ID 一致。
-3. 在 Windows 上运行 `pnpm install --frozen-lockfile` 和 `pnpm run release:check`。检查包括类型检查、完整测试、README 断言校验和 npm 打包清单检查。
-4. 推送提交；创建与 `package.json` 版本一致的标签，例如 `git tag v0.1.0`，然后推送标签。`.github/workflows/publish.yml` 会验证标签与版本完全相符，在 Windows runner 上重跑检查，然后用仓库 Secret 发布到 npm。首次版本也可走此流程。
-5. 发布后用 `npm view dsh-environment-tray@<版本> version --registry=https://registry.npmjs.org/` 核对版本，并按 README 的步骤从 npm 安装到 DSH Web 测试 profile。
+1. 确认 `package.json` 中的包名和版本。首发前用 `npm view dsh-environment-tray version --registry=https://registry.npmjs.org/` 检查名称仍可用；404 表示该包尚不存在。后续发布要使用从未发布过的新版本号。
+2. 更新版本和变更说明，提交源码及生成的 `lib/`，推送到 `master`。等待 GitHub `Release checks` 通过。`cordis.patch.yml` 的包名与 `tsdown.config.ts` 的客户端 bundle ID 应保持一致。
+3. 在准备发布的提交上，本机执行 `pnpm install --frozen-lockfile` 和 `pnpm run release:check`。需要时再用 `npm pack --dry-run --json --ignore-scripts` 人工检查文件清单。
+4. 用有该包发布权限的 npm 账号登录官方 registry：`npm login --registry=https://registry.npmjs.org/`，并用 `npm whoami --registry=https://registry.npmjs.org/` 确认账号。在仓库根目录运行 `npm publish`，按 npm CLI 提示完成浏览器验证或输入一次性验证码。`prepublishOnly` 会重跑发布检查，`prepack` 会重建 `lib/`。
+5. 用 `npm view dsh-environment-tray@<版本> version --registry=https://registry.npmjs.org/` 确认发布成功。然后给**刚发布的提交**创建标签，例如 `git tag v0.1.0`，执行 `git push origin v0.1.0`。再按 README 的步骤从 npm 安装到 DSH Web 测试 profile。
 
-工作流只在 `v*` 标签推送时发布。`prepublishOnly` 再次运行发布检查，`prepack` 重建 `lib/`；token 只供发布步骤使用。若发布失败，先看 GitHub Actions 日志中的具体 npm 错误，确认 token 权限与该版本是否已存在，不要重用已发布的版本号。
-
-参考：[DSH 插件打包与安装](https://deepseek-harness.github.io/deepseek-harness/en/develop/basic/publish)、[GitHub 发布 npm 包](https://docs.github.com/en/actions/tutorials/publish-packages/publish-nodejs-packages)、[npm package.json](https://docs.npmjs.com/files/package.json/)。
+如果 npm 返回 `EOTP`，不要在 CI 重试同一 token；改在维护者本机完成 npm 的交互式验证。npm 的具体 2FA 要求取决于账号、包设置和凭证类型；这里采用人工发布流程。参考：[npm 发布和 2FA 要求](https://docs.npmjs.com/requiring-2fa-for-package-publishing-and-settings-modification/)、[DSH 插件打包与安装](https://deepseek-harness.github.io/deepseek-harness/en/develop/basic/publish)。

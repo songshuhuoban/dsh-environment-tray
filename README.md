@@ -11,7 +11,7 @@ npm 包名：`dsh-environment-tray`。在 DSH Web UI 里管理环境变量：**�
 
 先安装并运行一次 DSH 的 `web` profile。需要可用的 `dsh` 命令和包管理器 `pnpm`。当前开发环境使用 DSH 0.1.7-rc.2；其他版本请先核对服务与客户端兼容性。
 
-从 npm 安装已发布版本：
+`0.1.0` 首发完成后，可从 npm 安装：
 
 ```powershell
 dsh plugin --profile web add dsh-environment-tray@0.1.0
