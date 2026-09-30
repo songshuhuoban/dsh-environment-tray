@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Environment variables",
-    "description": "View and edit .env files, runtime variables, credentials, and Windows environment variables. After enabling, click the Environment variables sliders icon at the top right of a new or existing chat."
+    "title": "Environment Variable Manager",
+    "description": "Manage .env files, runtime variables, credentials, and Windows user and system environment variables. Open Environment variables from the sliders icon at the top right of a new or existing chat."
   }
 }

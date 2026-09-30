@@ -1,6 +1,6 @@
 # 发布 `dsh-environment-tray`
 
-插件的 npm 包名是 `dsh-environment-tray`，用户可见名称是 **DSH Environment Tray（环境变量管理器）**。`dsh-environment-tray` 是 Cordis 行 ID，升级时保持稳定。发布包内有已构建的 Host 和 Client，可从 DeepSeek Harness 桌面客户端的**插件 → 添加插件**安装，安装者无需构建 TypeScript。
+插件的 npm 包名是 `dsh-environment-tray`，用户可见名称随界面语言切换：中文为 **环境变量管理器**，英文为 **Environment Variable Manager**。`dsh-environment-tray` 是 Cordis 行 ID，升级时保持稳定。发布包内有已构建的 Host 和 Client，可从 DeepSeek Harness 桌面客户端的**插件 → 添加插件**安装，安装者无需构建 TypeScript。
 
 ## 分工
 
@@ -9,6 +9,10 @@ GitHub 的 [`Release checks`](https://github.com/songshuhuoban/dsh-environment-t
 `0.1.0` 已由维护者手动发布到 npm，`v0.1.0` 标签指向发布记录中的 `gitHead`。此前的自动发布因 npm 返回 `EOTP` 而未成功，现已改为本机交互式发布。
 
 `0.1.1` 适配 DSH `0.2.0-rc.2` 桌面客户端：启用插件时同步激活组件，新会话与已有会话都能使用右上角入口；新增中英文插件介绍，并精简用户 README、加入入口截图。README 面向普通用户，只说明在桌面版填写 npm 包名安装、入口位置和使用方法；发布记录及验证流程保留在本文，已发布版本以 npm registry 为准。
+
+插件列表的名称和介绍来自随安装包发布的 `locale/en.json`、`locale/zh.json` 中的根级 `meta.title`、`meta.description`，不依赖客户端弹窗的语言注册。`0.1.0` 不包含这些文件，会回退为包名；已安装的旧包需要在桌面插件页面升级后才能显示中文。发布前用真实桌面 Host 验证两种语言的元信息，并检查打包清单包含两个语言文件，避免源码有翻译而安装包缺失。
+
+`0.1.2` 统一插件显示名称与介绍：中文名称为「环境变量管理器」，英文名称为「Environment Variable Manager」，两种语言均说明环境变量、.env、凭据、Windows 用户级与系统级变量，以及会话右上角入口。npm 安装预览的回退介绍与语言文件保持功能一致。
 
 ## 后续版本发布
 
