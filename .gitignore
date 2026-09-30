@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+*.tgz
 
 # Build scratch / probes that are not part of the deliverable
 .poc-tsdown/node_modules/

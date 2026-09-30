@@ -479,10 +479,10 @@ function EnvManagerPanel({ t }: LocaleProps) {
 function EnvManagerAction({ t }: LocaleProps) {
   const [open, setOpen] = useState(false)
   return React.createElement(React.Fragment, null,
-    React.createElement(Button, {
+    React.createElement('span', { className: 'dsh-environment-tray-entry' }, React.createElement(Button, {
       variant: 'ghost', size: 'sm', icon: React.createElement(EnvironmentIcon),
       title: t('title'), 'aria-label': t('title'), onClick: () => setOpen(true),
-    }),
+    })),
     React.createElement(Modal, {
       open, onClose: () => setOpen(false), title: t('title'), closeLabel: t('close'), className: 'dsh-environment-tray-dialog',
     }, open ? React.createElement(EnvManagerPanel, { t }) : null),
@@ -499,8 +499,9 @@ function apply(ctx: {
 } }) {
   installClientStyles()
   ctx.effect(() => ctx.locale.register(LOCALE_NS, dictionaries), 'dsh-environment-tray: browser dictionaries')
-  ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
-    name: 'conversation.session.header.utilities', id: 'dsh-environment-tray', order: 100, locale: LOCALE_NS,
+  // Global navigation stays mounted before a session exists and while its chrome is hidden.
+  ctx.slots.inject('conversation.header.leading', () => ctx.slots.register({
+    name: 'conversation.header.leading', locale: LOCALE_NS,
   }, EnvManagerAction))
 }
 export { apply, inject, EnvManagerAction, EnvManagerPanel }

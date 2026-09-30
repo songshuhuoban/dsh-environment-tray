@@ -17,6 +17,7 @@ import { readFileSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { runInNewContext } from 'node:vm'
+import ts from 'typescript'
 
 const BUILT = resolve('lib/client.js')
 const SOURCE = resolve('src/client.ts')
@@ -507,11 +508,10 @@ const ctx = {
 }
 exports.apply(ctx)
 ok('injects exactly one slot', injections.length === 1, injections.join(','))
-ok('slot is the session header utilities area', injections[0] === 'conversation.session.header.utilities', String(injections[0]))
+ok('slot is available before a session exists', injections[0] === 'conversation.header.leading', String(injections[0]))
 ok('no longer registers a Settings tab', !injections.includes('settings.plugins.tab'), injections.join(','))
 ok('registers exactly one entry', registrations.length === 1, String(registrations.length))
-ok('entry id is dsh-environment-tray', registrations[0]?.options?.id === 'dsh-environment-tray', JSON.stringify(registrations[0]?.options ?? {}))
-ok('entry carries an order', typeof registrations[0]?.options?.order === 'number', String(registrations[0]?.options?.order))
+ok('entry registers in the persistent navigation slot', registrations[0]?.options?.name === injections[0])
 const namespace = registrations[0]?.options?.locale
 ok('entry declares its native locale namespace', namespace === 'dsh-environment-tray')
 ok('registers dictionaries through a managed effect', dictionaries.length === 1 && disposers.length === 1 && dictionaries[0].ns === namespace)
@@ -521,6 +521,79 @@ ok('both languages have identical interpolation placeholders', Object.keys(dicti
   JSON.stringify([...dictionaries[0].dicts.en[key].matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort()) ===
   JSON.stringify([...dictionaries[0].dicts.zh[key].matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort())))
 delete globalThis.window
+
+section('新会话与已有会话')
+{
+  // Run the upstream header, including the sessionless and hideChrome branches.
+  const fixture = readFileSync(resolve('fixtures/dsh-0.2.0-rc.2/ConversationHeader.tsx'), 'utf8')
+  const compiled = ts.transpileModule(fixture, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText
+  const headerExports = {}
+  const jsx = (type, props) => React.createElement(type, props, props.children)
+  runInNewContext(compiled, {
+    exports: headerExports,
+    require(spec) {
+      if (spec === 'react/jsx-runtime') return { jsx, jsxs: jsx, Fragment: React.Fragment }
+      if (spec === 'clsx') return { default: (...values) => values.filter(Boolean).join(' ') }
+      if (spec.endsWith('/snapshot.ts')) return { conversationPhase: (session) => session.blank ? 'blank' : 'active' }
+      if (spec.endsWith('.module.css')) return { default: {} }
+      throw new Error(`unknown header module: ${spec}`)
+    },
+  })
+  let session
+  const t = (key, params) => locale.bind(namespace)(key, params)
+  const renderSlot = (name, props) => {
+    if (name === 'conversation.session.header') {
+      return React.createElement('div', null,
+        props.hideChrome ? null : renderSlot('conversation.session.header.utilities', {}),
+        React.createElement('button', { 'aria-label': '侧栏' }),
+      )
+    }
+    return registrations.filter((entry) => entry.options.name === name)
+      .map((entry) => React.createElement(entry.component, { t }))
+  }
+  const header = () => renderer.settle(headerExports.ConversationHeader, {
+    sessionId: session?.id,
+    useSession: (select) => select(session),
+    useConversation: (select) => select(session ? {} : undefined),
+    renderSlot,
+  })
+  for (const [label, value] of [
+    ['未创建会话的新会话页', undefined],
+    ['已有 ID 的空白新会话', { id: 'blank', blank: true }],
+    ['已有消息的会话', { id: 'active', blank: false }],
+  ]) {
+    session = value
+    renderer.reset()
+    const { impl, calls } = makeFetch('ok')
+    globalThis.fetch = impl
+    let tree = await header()
+    const buttons = collect(tree, 'button').filter((button) => labelOf(button) === '环境变量')
+    ok(`${label}显示唯一环境变量入口`, buttons.length === 1)
+    ok(`${label}打开前不读取环境变量`, calls.length === 0)
+    buttons[0]?.props.onClick()
+    tree = await header()
+    ok(`${label}可以打开并加载环境变量`, calls.some((call) => call.url === '/api/dsh-environment-tray/state') &&
+      collect(tree, 'div').some((node) => node.props.className === 'dsh-environment-tray-row'))
+  }
+  // Starting a conversation must not unmount the global entry or its open panel.
+  renderer.reset()
+  session = undefined
+  const { impl, calls } = makeFetch('ok')
+  globalThis.fetch = impl
+  let tree = await header()
+  collect(tree, 'button').find((button) => labelOf(button) === '环境变量')?.props.onClick()
+  await header()
+  const reads = calls.length
+  session = { id: 'created', blank: true }
+  await header()
+  session = { id: 'created', blank: false }
+  tree = await header()
+  ok('新会话变为已有会话时保留打开的面板',
+    collect(tree, 'div').some((node) => node.props.className === 'dsh-environment-tray-row') && calls.length === reads)
+  renderer.reset()
+}
 
 /* ────────────────────────────── 驱动 ────────────────────────────── */
 

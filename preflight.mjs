@@ -275,12 +275,10 @@ console.log('\n=== 6. 组合配置里我们的行 ===')
       const near = lines.slice(Math.max(0, idx - 1), idx + 3).join('\n')
       const isDisabled = /disabled:\s*true/.test(near)
 
-      // **被禁用是合法配置，不是失败。** 本 bundle 出厂就是 `disabled: true`
-      // （理由见 cordis.patch.yml），由用户在 profile 的 patch 层显式开启。
-      // 早先这里直接断言 `our row is not disabled`，于是用户按设计关掉它时
-      // preflight 会报失败 —— 那是把"用户的正常选择"误报成"配置坏了"。
+      // 被禁用是合法配置，不是失败：用户可在插件页关闭组件或整个 bundle。
+      // 是否开启由用户选择，preflight 只报告组合状态。
       if (isDisabled) {
-        info('row state', 'DISABLED（出厂默认即如此；这是合法状态，不是错误）')
+        info('row state', 'DISABLED（用户配置已关闭；这是合法状态，不是错误）')
         console.log('      → 想启用：在 profile 的 cordis.patch.yml 里加 `- id: dsh-environment-tray` / `  disabled: false`')
       } else {
         info('row state', 'ENABLED')

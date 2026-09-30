@@ -1,7 +1,7 @@
 {
   "name": "dsh-environment-tray",
-  "version": "0.1.0",
-  "description": "Manage DeepSeek Harness environment variables and credentials from the Web UI.",
+  "version": "0.1.1",
+  "description": "Manage environment variables and credentials in DeepSeek Harness. Click the Environment variables sliders icon at the top right of a new or existing chat.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/songshuhuoban/dsh-environment-tray.git"
@@ -13,12 +13,15 @@
   "exports": {
     ".": "./lib/index.js",
     "./client": "./lib/client.js",
+    "./locale/*.json": "./locale/*.json",
     "./package.json": "./package.json"
   },
   "files": [
     "lib/*.js",
+    "locale/*.json",
     "cordis.patch.yml",
-    "docs/*.md"
+    "docs/*.md",
+    "docs/images/*.png"
   ],
   "scripts": {
     "build": "tsdown",
@@ -26,6 +29,7 @@
     "typecheck": "tsc --noEmit",
     "test": "pnpm run build && node check-p0.mjs && node verify-env-model.mjs && node verify-env-write.mjs && node verify-credentials.mjs && node verify-host-api.mjs && node verify-registry.mjs && node verify-registry-roundtrip.mjs && node verify-write-routes.mjs && node audit-hostile-input.mjs && node verify-client-ui.mjs && node verify-live-environment.mjs",
     "test:parity": "node verify-build-parity.mjs",
+    "test:desktop": "node verify-desktop-runtime.mjs",
     "preflight": "node preflight.mjs",
     "prepack": "pnpm run build",
     "package:check": "node scripts/verify-package.mjs",
@@ -42,9 +46,10 @@
     }
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "4.0.2"
+    "@deepseek-ai/cordis": ">=4.0.2 <5"
   },
   "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.4",
     "@types/node": "^26.6.3",
     "@types/react": "~18.3.1",
     "react": "^18.2.0",

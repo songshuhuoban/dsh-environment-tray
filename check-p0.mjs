@@ -214,17 +214,16 @@ try {
 }
 ok('client apply() does not throw', clientApplyThrew === undefined, String(clientApplyThrew ?? ''))
 ok(
-  'injects into the session header utilities area',
-  injections.join(',') === 'conversation.session.header.utilities',
+  'injects into persistent conversation navigation',
+  injections.join(',') === 'conversation.header.leading',
   injections.join(','),
 )
 ok('does not register a Settings tab', !injections.includes('settings.plugins.tab'), injections.join(','))
 ok('registers one entry', registrations.length === 1, String(registrations.length))
 ok(
-  'entry options carry name+id+order',
-  registrations[0]?.options?.name === 'conversation.session.header.utilities' &&
-    registrations[0]?.options?.id === 'dsh-environment-tray' &&
-    typeof registrations[0]?.options?.order === 'number',
+  'entry options select the global single slot and locale',
+  registrations[0]?.options?.name === 'conversation.header.leading' &&
+    registrations[0]?.options?.locale === 'dsh-environment-tray',
   JSON.stringify(registrations[0]?.options ?? {}),
 )
 ok('entry component is a function', typeof registrations[0]?.component === 'function')

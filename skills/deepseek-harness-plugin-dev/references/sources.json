@@ -1,0 +1,742 @@
+{
+  "root": "https://deepseek-harness.github.io/deepseek-harness/en/reference/",
+  "fetched_at": "2026-09-27T16:42:18.926069+00:00",
+  "coverage": "Full document bodies retrieved for reachable pages; curated contract guidance and on-demand type lookup. Examples were not all executed.",
+  "pages": [
+    {
+      "key": "agent-lifecycle",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/agent-lifecycle",
+      "title": "Agent Turn And Step Lifecycle ",
+      "sha256": "ed3d87419a9249707754afb960904a7c9dab4f9845f37ca6cfd1282703b63715",
+      "characters": 1884,
+      "fetched_at": "2026-09-27T16:41:43.010228+00:00"
+    },
+    {
+      "key": "api-gateway",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/api-gateway",
+      "title": "API Gateway ",
+      "sha256": "82aec1099d825a8b8b0a68dde178760a2ce2005614b96b624f7a8cb675894961",
+      "characters": 17836,
+      "fetched_at": "2026-09-27T16:41:43.238451+00:00"
+    },
+    {
+      "key": "capability-seams",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/capability-seams",
+      "title": "Capability Seams And Core Services ",
+      "sha256": "f7e235e06de5139cb7795468260e7d6a546244f9787e4879410e22fae5fc1373",
+      "characters": 18682,
+      "fetched_at": "2026-09-27T16:41:43.266691+00:00"
+    },
+    {
+      "key": "config-catalog",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/config-catalog",
+      "title": "Plugin Config Catalog ",
+      "sha256": "25476dd97d77d182957feb6a52cea75e5f5e5c483ea8264f8b3bed0ffbff4ac2",
+      "characters": 132480,
+      "fetched_at": "2026-09-27T16:41:44.070758+00:00"
+    },
+    {
+      "key": "cookbook/adding-a-package",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/adding-a-package",
+      "title": "Cookbook: adding a workspace package ",
+      "sha256": "3afd8558e75a9a83555f8291d60542c4b2f0057bc6ef849b123986dbf7a4535f",
+      "characters": 11732,
+      "fetched_at": "2026-09-27T16:41:43.220112+00:00"
+    },
+    {
+      "key": "cookbook/adding-a-settings-card",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/adding-a-settings-card",
+      "title": "Cookbook: adding a settings card ",
+      "sha256": "fca8b67611ee7801d42109b352ac0015ac1fafa87e80724f08ee6b18221e6301",
+      "characters": 5455,
+      "fetched_at": "2026-09-27T16:41:43.337636+00:00"
+    },
+    {
+      "key": "cookbook/adding-a-tool",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/adding-a-tool",
+      "title": "Tool authoring reference ",
+      "sha256": "951686b2017d5997401f4a25820783e19c683d8f66d9d7141640dddb8aadcce9",
+      "characters": 13112,
+      "fetched_at": "2026-09-27T16:41:44.961007+00:00"
+    },
+    {
+      "key": "cookbook/adding-an-llm-adapter",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/adding-an-llm-adapter",
+      "title": "Cookbook: adding an LLM adapter ",
+      "sha256": "9faa1183752c95e4ef9cffd12336a752fcc0e6a6740cad02e58e7874ebe01180",
+      "characters": 3783,
+      "fetched_at": "2026-09-27T16:41:45.285706+00:00"
+    },
+    {
+      "key": "cookbook/extension-cookbook",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/cookbook/extension-cookbook",
+      "title": "Cookbook: extension plugin shapes ",
+      "sha256": "1b6303b1c31dd305e72268af8f792754480f3694bcec4debcd9ce115b9673b1e",
+      "characters": 10687,
+      "fetched_at": "2026-09-27T16:41:45.269788+00:00"
+    },
+    {
+      "key": "cordis-api/context",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/cordis-api/context",
+      "title": "Context ",
+      "sha256": "3506c5d4134011e9b88ea2a0df5a0f6a070e620e45464819862358f24c842466",
+      "characters": 10737,
+      "fetched_at": "2026-09-27T16:41:45.249161+00:00"
+    },
+    {
+      "key": "cordis-api/events",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/cordis-api/events",
+      "title": "Events ",
+      "sha256": "17b0b013a49367ffc57ae9737cda0d2af1dbbecc02df41a1d4d5f39f46207f2a",
+      "characters": 6597,
+      "fetched_at": "2026-09-27T16:41:45.410498+00:00"
+    },
+    {
+      "key": "cordis-api/fiber",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/cordis-api/fiber",
+      "title": "Fiber ",
+      "sha256": "f9ddcf56d339d40fdc4fc12fd3fbd45e6af9470187c76723d494be892f00bfe8",
+      "characters": 10090,
+      "fetched_at": "2026-09-27T16:41:47.042988+00:00"
+    },
+    {
+      "key": "cordis-api/inherited",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/cordis-api/inherited",
+      "title": "Inherited Cordis API ",
+      "sha256": "b0039a0436d65e39781702c1fca5dbb9066af7c68aee139114e2d58e6ac1cc0b",
+      "characters": 3683,
+      "fetched_at": "2026-09-27T16:41:47.761119+00:00"
+    },
+    {
+      "key": "cordis-api/registry",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/cordis-api/registry",
+      "title": "Registry ",
+      "sha256": "c2b64fca485f4410619146a39e1aa411e1825bf069b71d0c71ca0018b5f7b7ea",
+      "characters": 4869,
+      "fetched_at": "2026-09-27T16:41:47.201605+00:00"
+    },
+    {
+      "key": "cordis-api/service",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/cordis-api/service",
+      "title": "Service ",
+      "sha256": "5fa82acdbd5e6ddc50883330916f2f101808673374611e83b72e7bbc6025fc3e",
+      "characters": 2064,
+      "fetched_at": "2026-09-27T16:41:47.184187+00:00"
+    },
+    {
+      "key": "cordis-primer",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/cordis-primer",
+      "title": "Cordis Primer ",
+      "sha256": "97ca2f5abeb4c437eba609fa4b45d99f4604d8cdd59fc309ffb74016a82630d0",
+      "characters": 3912,
+      "fetched_at": "2026-09-27T16:41:47.306535+00:00"
+    },
+    {
+      "key": "index",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/",
+      "title": "DeepSeek Harness Architecture ",
+      "sha256": "3595d42386804b571bb5976592e07f10a1342764d64485c08e37ea1604b74837",
+      "characters": 16164,
+      "fetched_at": "2026-09-27T16:41:41.247697+00:00"
+    },
+    {
+      "key": "persistence-catalog",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/persistence-catalog",
+      "title": "Session Persistence Event Catalog ",
+      "sha256": "488dd37cd44b6a6f4ee56d4758ddfb143c3d1ed099a7c579b419a025c46d8cfc",
+      "characters": 33238,
+      "fetched_at": "2026-09-27T16:41:47.551050+00:00"
+    },
+    {
+      "key": "subsystems",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems",
+      "title": "Subsystems ",
+      "sha256": "662b14600de9b0bbce1002bf9a1a4279df44b9aecf8aaabbf2173b53ba509734",
+      "characters": 8376,
+      "fetched_at": "2026-09-27T16:41:50.466195+00:00"
+    },
+    {
+      "key": "subsystems/approval",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/approval",
+      "title": "User Approval ",
+      "sha256": "65cabd7387a133d97df22edf5980ef1600c6273d8cf2c86c942100c3a2920e37",
+      "characters": 8452,
+      "fetched_at": "2026-09-27T16:41:49.076882+00:00"
+    },
+    {
+      "key": "subsystems/client-modules",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/client-modules",
+      "title": "Client Modules ",
+      "sha256": "805f81a34562307d38c5f956b115627620f1c4a37c1d2cf7b3349e1f7e2bdda0",
+      "characters": 12369,
+      "fetched_at": "2026-09-27T16:41:49.139160+00:00"
+    },
+    {
+      "key": "subsystems/client-resources",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/client-resources",
+      "title": "Client Resources ",
+      "sha256": "4c2e8c1952273aab9ab8e8c98d2b1c3daf125cee5439a17d85571196b3aa5f61",
+      "characters": 7077,
+      "fetched_at": "2026-09-27T16:41:49.563575+00:00"
+    },
+    {
+      "key": "subsystems/code-runtime",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/code-runtime",
+      "title": "Code Runtime ",
+      "sha256": "c3082aa68496dfe735428502870bf15938c982f950b07bed5f6066a9993e1042",
+      "characters": 10611,
+      "fetched_at": "2026-09-27T16:41:50.652515+00:00"
+    },
+    {
+      "key": "subsystems/commands",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/commands",
+      "title": "Human Commands ",
+      "sha256": "8db96877b9f91ec94f2720aaf14330b6f48bd4f8be695a33b421eb1370422c93",
+      "characters": 9065,
+      "fetched_at": "2026-09-27T16:41:49.664198+00:00"
+    },
+    {
+      "key": "subsystems/compaction",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/compaction",
+      "title": "Compaction ",
+      "sha256": "119a3ace814caf738f7feaf2efed938ad0fa78eab911b0e28967441a735e5c95",
+      "characters": 15785,
+      "fetched_at": "2026-09-27T16:41:51.254052+00:00"
+    },
+    {
+      "key": "subsystems/conversation",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/conversation",
+      "title": "Conversation assembly ",
+      "sha256": "bdc6a768f36bc8b58cf54093d80ebdc20d1da23d198047b9e5d85bbfd6364b3b",
+      "characters": 16165,
+      "fetched_at": "2026-09-27T16:41:51.279626+00:00"
+    },
+    {
+      "key": "subsystems/core",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/core",
+      "title": "Core ",
+      "sha256": "f86c32692f9dd2e9a56b1c6c664a19c450d81b6fe52de0979b0eff547be5dcf0",
+      "characters": 61523,
+      "fetched_at": "2026-09-27T16:41:52.940166+00:00"
+    },
+    {
+      "key": "subsystems/credentials",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/credentials",
+      "title": "User Credentials ",
+      "sha256": "e89caceb6663e4effd28c1a04e074071d1f10ba6fb174a08be9b43e88f552a1a",
+      "characters": 15145,
+      "fetched_at": "2026-09-27T16:41:52.125777+00:00"
+    },
+    {
+      "key": "subsystems/filesystem",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/filesystem",
+      "title": "Filesystem ",
+      "sha256": "86277be2b3b34bd88e55648f2321bd215b03ea245e6fb961a6ee69b92d63f46f",
+      "characters": 28635,
+      "fetched_at": "2026-09-27T16:41:52.512110+00:00"
+    },
+    {
+      "key": "subsystems/goal",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/goal",
+      "title": "Same-session goals ",
+      "sha256": "b2e503991d1997944cc12719da971951a79062dfda86b30deefd4111a77cbd63",
+      "characters": 10751,
+      "fetched_at": "2026-09-27T16:41:52.415735+00:00"
+    },
+    {
+      "key": "subsystems/invariants",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/invariants",
+      "title": "Runtime Invariants ",
+      "sha256": "91ebeb607449e845371d267f0381a057e951ca2f2fe09536e1f53bca36b10862",
+      "characters": 5772,
+      "fetched_at": "2026-09-27T16:41:53.254248+00:00"
+    },
+    {
+      "key": "subsystems/jobs",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/jobs",
+      "title": "Background Task Runtime ",
+      "sha256": "3a7d503316924b29ef1d94607cd2dae412d3ff9083241b2b0eb74a142a61fcb3",
+      "characters": 13546,
+      "fetched_at": "2026-09-27T16:41:53.261526+00:00"
+    },
+    {
+      "key": "subsystems/llm-streaming",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/llm-streaming",
+      "title": "LLM Streaming ",
+      "sha256": "2d67e78f46365ab4023db88b8b41b143e17e45b7429b2ad8acaafa8a0d4d63ac",
+      "characters": 59185,
+      "fetched_at": "2026-09-27T16:41:54.422384+00:00"
+    },
+    {
+      "key": "subsystems/lsp",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/lsp",
+      "title": "LSP navigation ",
+      "sha256": "809d23c57ba99cb3c1fd900e613b95a532bbf0d15ac67d47085e18266cc2b4ee",
+      "characters": 9758,
+      "fetched_at": "2026-09-27T16:41:54.553018+00:00"
+    },
+    {
+      "key": "subsystems/permission-presets",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/permission-presets",
+      "title": "Permission Presets ",
+      "sha256": "1130c6027dcdc8fcf87169dfde8e9ffd3c201db3f6dab34b9555eaeba9d8bd6d",
+      "characters": 7052,
+      "fetched_at": "2026-09-27T16:41:54.532092+00:00"
+    },
+    {
+      "key": "subsystems/persistence",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/persistence",
+      "title": "Session Persistence ",
+      "sha256": "8bf9a4228ba426d9da2d5cbe21c0683d9651cfd8cc3805c691b0acf0cdb93a2a",
+      "characters": 25660,
+      "fetched_at": "2026-09-27T16:41:55.106398+00:00"
+    },
+    {
+      "key": "subsystems/plan",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/plan",
+      "title": "Plan Mode ",
+      "sha256": "fe3b45cb9fae3c353a26d3e6d57f1b6b9856d622ae31ebe4fe96f58eba76e2e1",
+      "characters": 6911,
+      "fetched_at": "2026-09-27T16:41:55.119949+00:00"
+    },
+    {
+      "key": "subsystems/sandbox",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/sandbox",
+      "title": "Process Sandbox ",
+      "sha256": "cddabcd87c28780a8834cd2048b3145a7c30a618a2b4e01c1d0fd51f04c4a2a1",
+      "characters": 11552,
+      "fetched_at": "2026-09-27T16:41:55.190595+00:00"
+    },
+    {
+      "key": "subsystems/schedule",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/schedule",
+      "title": "Session-local Schedule ",
+      "sha256": "deed1a49eae6f224dac599401682c93cac81c63bad913860bbbfdf211b47d774",
+      "characters": 11214,
+      "fetched_at": "2026-09-27T16:41:56.460301+00:00"
+    },
+    {
+      "key": "subsystems/scope",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/scope",
+      "title": "Scoped Registration ",
+      "sha256": "53f1c6a18dc0f6a88c7fc73227f1cc95178f4786eabd8f6d1045dcaaf4e25103",
+      "characters": 3389,
+      "fetched_at": "2026-09-27T16:41:56.440723+00:00"
+    },
+    {
+      "key": "subsystems/session",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/session",
+      "title": "Sessions ",
+      "sha256": "9384a832e80d94c1ce671cfb63a36e1649fa0293a374ae68f2169938aa7ca7f9",
+      "characters": 63146,
+      "fetched_at": "2026-09-27T16:41:56.839913+00:00"
+    },
+    {
+      "key": "subsystems/session-projection",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/session-projection",
+      "title": "Session Projections ",
+      "sha256": "547f90e8ecc165777a2a91455e0cb8bec10c1254efbe16e57d000df2ac8d9714",
+      "characters": 21172,
+      "fetched_at": "2026-09-27T16:41:57.218158+00:00"
+    },
+    {
+      "key": "subsystems/session-query",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/session-query",
+      "title": "Session Query ",
+      "sha256": "39fe1ba6fd5bbd8fb280972601176811581af8e1b790b623e818a5358959af27",
+      "characters": 20666,
+      "fetched_at": "2026-09-27T16:41:57.409447+00:00"
+    },
+    {
+      "key": "subsystems/session-reference",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/session-reference",
+      "title": "Session References ",
+      "sha256": "88a70e5ed9fee99513fd9228fe9a7de06c7a0addb521c77d29489d1c870fe752",
+      "characters": 9166,
+      "fetched_at": "2026-09-27T16:41:57.259544+00:00"
+    },
+    {
+      "key": "subsystems/session-telemetry",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/session-telemetry",
+      "title": "SessionTelemetryBackend ",
+      "sha256": "4c6ff06248fb92625fee7f11b0d6fb63bb17c6fc662af8435aa445610826a932",
+      "characters": 11812,
+      "fetched_at": "2026-09-27T16:41:58.569849+00:00"
+    },
+    {
+      "key": "subsystems/session-title",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/session-title",
+      "title": "Session Titles ",
+      "sha256": "f43f9e85148bde9814421ac31dde2e599f4ec5abb1b3dedf6180257ed4d884d8",
+      "characters": 8032,
+      "fetched_at": "2026-09-27T16:41:58.791886+00:00"
+    },
+    {
+      "key": "subsystems/settings",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/settings",
+      "title": "User Settings ",
+      "sha256": "727979c31d3b5c003d83c757a4e6aab247b3d319c37e2395e3092cadaa54f4d3",
+      "characters": 21154,
+      "fetched_at": "2026-09-27T16:41:58.903838+00:00"
+    },
+    {
+      "key": "subsystems/shell",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/shell",
+      "title": "Bash Executor ",
+      "sha256": "3dd0f1ed484d6828c1c4f6926a216142bb110b39fd9572ae8643ade69a22fad0",
+      "characters": 16167,
+      "fetched_at": "2026-09-27T16:41:59.130329+00:00"
+    },
+    {
+      "key": "subsystems/sidebar-right",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/sidebar-right",
+      "title": "Right Sidebar ",
+      "sha256": "b41df8aff79d5dc55c7d1a5b8b1b841465deca8d28f30564437b05c89e554d48",
+      "characters": 21797,
+      "fetched_at": "2026-09-27T16:41:59.321459+00:00"
+    },
+    {
+      "key": "subsystems/skills",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/skills",
+      "title": "Skills ",
+      "sha256": "d9d33115edc778cc4fc2fcfd71e8c6ff4f77289179ebe2b55629cf90ddf82a23",
+      "characters": 22954,
+      "fetched_at": "2026-09-27T16:41:59.293395+00:00"
+    },
+    {
+      "key": "subsystems/slots",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/slots",
+      "title": "Web Client Slots ",
+      "sha256": "b7eadad806bf68e056667d620cccde8d39fdfd486ab2158f566e2139eb41ca27",
+      "characters": 11588,
+      "fetched_at": "2026-09-27T16:42:00.478201+00:00"
+    },
+    {
+      "key": "subsystems/spill",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/spill",
+      "title": "Spill Storage ",
+      "sha256": "7529d98242f72ea3dbe747741bb2c912883f39bb02da6245de3ddbe248f620c1",
+      "characters": 6296,
+      "fetched_at": "2026-09-27T16:42:00.581318+00:00"
+    },
+    {
+      "key": "subsystems/storage",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/storage",
+      "title": "Storage ",
+      "sha256": "21041b8db30778e763efa5363002877acd633a19a9e8d0b00bc75e096b0d6cc9",
+      "characters": 15289,
+      "fetched_at": "2026-09-27T16:42:01.134064+00:00"
+    },
+    {
+      "key": "subsystems/subagent",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/subagent",
+      "title": "Subagent ",
+      "sha256": "7b96a317b6f1ba259470c11f808f3174023b5893e695e35ebcb1818f5d1892c1",
+      "characters": 53461,
+      "fetched_at": "2026-09-27T16:42:01.179260+00:00"
+    },
+    {
+      "key": "subsystems/subprocess",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/subprocess",
+      "title": "Subprocess ",
+      "sha256": "62bc26eabcb4e36aa7e8999f7ec6d4376869f22bcf00ecda990618a747d0a09d",
+      "characters": 16701,
+      "fetched_at": "2026-09-27T16:42:01.443073+00:00"
+    },
+    {
+      "key": "subsystems/system-prompt",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/system-prompt",
+      "title": "System Prompt Assembly ",
+      "sha256": "dd6ffbc9d5c9d2116af62aa6f1b38ca79ebb811b402ab9ad7d8ba1540043e07f",
+      "characters": 10108,
+      "fetched_at": "2026-09-27T16:42:01.274688+00:00"
+    },
+    {
+      "key": "subsystems/terminal",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/terminal",
+      "title": "Persistent PTY Sessions ",
+      "sha256": "ed7cf326112b4e5b6aa80c9e59a9a8affd8ae937375024485ac8d9b5f0f777f1",
+      "characters": 7836,
+      "fetched_at": "2026-09-27T16:42:02.382086+00:00"
+    },
+    {
+      "key": "subsystems/token-meter",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/token-meter",
+      "title": "Token Meter ",
+      "sha256": "d9a2dfe988308821c980cf5fa6ef61d51902b72bc90cdadfffda5a88eab7a4c8",
+      "characters": 5378,
+      "fetched_at": "2026-09-27T16:42:02.496588+00:00"
+    },
+    {
+      "key": "subsystems/tools",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/tools",
+      "title": "Tools ",
+      "sha256": "4f91d82a82e50963ab480bb7df0691f668c047fa5927c85b6c35f8296add83ad",
+      "characters": 40450,
+      "fetched_at": "2026-09-27T16:42:03.676824+00:00"
+    },
+    {
+      "key": "subsystems/typert",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/typert",
+      "title": "Typert remote calls ",
+      "sha256": "932db2dc52eee506c50fcb12c61fcfad4ea70162a041263fdad78f694d5df903",
+      "characters": 14174,
+      "fetched_at": "2026-09-27T16:42:03.201020+00:00"
+    },
+    {
+      "key": "subsystems/user-questions",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/user-questions",
+      "title": "User Interaction ",
+      "sha256": "fbecddcec3891d71eb8166edaa9cfe8b3c61d21884ec15b4f8cb057441eb0e07",
+      "characters": 7501,
+      "fetched_at": "2026-09-27T16:42:03.324133+00:00"
+    },
+    {
+      "key": "subsystems/web",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/web",
+      "title": "Web Access ",
+      "sha256": "cd807f54bab627aae901d84f3ce4e5a98c6bfb937fe4fecdf4469f022dd0fa69",
+      "characters": 11894,
+      "fetched_at": "2026-09-27T16:42:03.403042+00:00"
+    },
+    {
+      "key": "subsystems/web-client",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/web-client",
+      "title": "Web Client architecture ",
+      "sha256": "263255d8a0173cd0cc194f712cc05edd7002d5e76ed2fec0f9ce94b54b82d99c",
+      "characters": 12162,
+      "fetched_at": "2026-09-27T16:42:05.017933+00:00"
+    },
+    {
+      "key": "subsystems/web-server",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/web-server",
+      "title": "HTTP Server ",
+      "sha256": "cab53c94e6d05342e80d8183276691b2af5e59bd7bc53023ae8a8f6b559ecc17",
+      "characters": 8739,
+      "fetched_at": "2026-09-27T16:42:04.338127+00:00"
+    },
+    {
+      "key": "subsystems/workflow",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/workflow",
+      "title": "Workflow ",
+      "sha256": "1545a34140348fbb8ed1c8f1f138f6a5dd69a94c430dd0a3ac7f4fdfa10f8cad",
+      "characters": 13978,
+      "fetched_at": "2026-09-27T16:42:05.176189+00:00"
+    },
+    {
+      "key": "subsystems/workspace",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subsystems/workspace",
+      "title": "Workspaces ",
+      "sha256": "46426c1a5f3a88a3fe91a2d94e8d819880bcf7fa05f426d91593d3c3a440e067",
+      "characters": 20859,
+      "fetched_at": "2026-09-27T16:42:06.775254+00:00"
+    },
+    {
+      "key": "tool-catalog",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/tool-catalog",
+      "title": "Tool Schema Catalog ",
+      "sha256": "7ebae0431955ece180f8ce071318eb72d04de5214c51dc3cff8e4e3a316e4785",
+      "characters": 86382,
+      "fetched_at": "2026-09-27T16:42:05.652630+00:00"
+    },
+    {
+      "key": "tool-execution-pipeline",
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/tool-execution-pipeline",
+      "title": "Tool Execution Pipeline ",
+      "sha256": "e964c6739fbb66e048d2f3da41407e15a9b0f66aad9c03178271344d1c73897c",
+      "characters": 1477,
+      "fetched_at": "2026-09-27T16:42:05.523237+00:00"
+    }
+  ],
+  "failures": [],
+  "broken_links": [
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/approval",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/client-modules",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/client-resources",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/code-runtime",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/commands",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/compaction",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/conversation",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/core",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/credentials",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/filesystem",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/goal",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/invariants",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/jobs",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/llm-streaming",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/lsp",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/permission-presets",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/persistence",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/plan",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/sandbox",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/schedule",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/scope",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/session",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/session-projection",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/session-query",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/session-reference",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/session-telemetry",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/session-title",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/settings",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/shell",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/sidebar-right",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/skills",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/slots",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/spill",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/storage",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subagent",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/subprocess",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/system-prompt",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/terminal",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/token-meter",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/tools",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/typert",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/user-questions",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/web",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/web-client",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/web-server",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/workflow",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://deepseek-harness.github.io/deepseek-harness/en/reference/workspace",
+      "error": "HTTP Error 404: Not Found"
+    }
+  ]
+}

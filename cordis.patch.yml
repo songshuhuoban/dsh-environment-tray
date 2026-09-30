@@ -1,37 +1,8 @@
-# dsh-environment-tray bundle patch.
-#
-# A bundle layer's patch is applied in `dsh.profile.bundles` order, before the
-# profile's own cordis.patch.yml. Every row below is an `insert`, so this layer
-# only ADDS a row — it never overrides or disables a row owned by dsh-base or
-# dsh-web-app.
-#
-# ── 默认不启用 ──────────────────────────────────────────────────────────────
-#
-# `disabled: true` 是刻意的，**不是占位**。同一个操作模式在 `dsh-web-app`
-# 的 bundle patch 里也有先例：`ui-schedule` 那行同样带 `disabled: true`，
-# 由显式 overlay 才启用。
-#
-# 理由：安装一个 bundle 不应该顺带改变运行中的行为。挂载（`dsh plugin add`）
-# 与启用是两个决定，把它们合并会让"我只是想装一下"变成"我的 DSH 行为变了" ——
-# 而且一旦它在启动时出问题，用户会直接失去 DSH，代价远高于收益。
-#
-# ── 如何启用 ────────────────────────────────────────────────────────────────
-#
-# 在 profile 自己的 patch 层里覆盖这一行（该层在本 bundle 层**之后**应用）：
-#
-#   # $DSH_HOME/profiles/web/cordis.patch.yml
-#   - id: dsh-environment-tray
-#     disabled: false
-#
-# 也可以直接编辑本文件把它改成 `disabled: false`，但那样会在下次
-# `dsh plugin add` 更新时被覆盖，所以推荐用 profile 的 patch 层。
-#
-# ── 行的作用 ────────────────────────────────────────────────────────────────
-#
-# 一个 host-plane 行。浏览器侧的页签随同一行到达：`dsh.client.modules` 会扫描
-# 已启用的 Loader 条目并挑出声明了 `dsh.client` 的包，所以双面包不需要第二行。
-
+# The plugin manager controls installation and bundle activation separately.
+# Once the user enables this bundle, its only component should be active too.
+# A disabled component here would leave Desktop's "Enable now" with no UI entry.
+# Profile-level component overrides still take precedence over this default.
 - insert:
     - id: dsh-environment-tray
       name: dsh-environment-tray
-      disabled: true
+      disabled: false

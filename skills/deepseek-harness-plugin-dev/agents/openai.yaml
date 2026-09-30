@@ -1,0 +1,4 @@
+interface:
+  display_name: "DeepSeek Harness 插件开发"
+  short_description: "开发和审查 dsh 插件、工具、模型适配器及 Web/桌面 UI 扩展"
+  default_prompt: "使用 $deepseek-harness-plugin-dev 按项目实际版本实现一个 DeepSeek Harness 插件，并验证加载、卸载与相关行为。"

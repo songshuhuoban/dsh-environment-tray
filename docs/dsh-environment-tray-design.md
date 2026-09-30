@@ -2391,6 +2391,8 @@ next[i] = { kind: 'entry', raw: content + eol, content, key: seg.key, value }
 
 ### 32.2 入口：`conversation.session.header.utilities`
 
+> 2026-09-30 桌面适配更新：以下记录为旧版选型。DSH `0.2.0-rc.2` 在空白会话隐藏 utilities，未创建 Session 时不渲染 Session header。当前实现改用始终挂载的 `conversation.header.leading`（single、root），通过样式将按钮放在右上角原生侧栏按钮旁；新会话与已有会话都可打开。回归测试使用该版本原始 `ConversationHeader.tsx`，覆盖未创建会话、空白会话、已有消息及状态切换。
+
 槽位是从**实测的类型声明**里找出来的，不是猜的。`dsh-client-ui-conversation` 的
 `contract/slots.d.ts` 声明：
 

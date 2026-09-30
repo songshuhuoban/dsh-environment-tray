@@ -66,6 +66,11 @@ const STYLE_ID = 'dsh-environment-tray-client-style'
  *    `<head>` 末尾的。
  */
 const CSS = `
+/* Keep the global entry beside the native corner button, even on a blank chat. */
+header[data-window-drag]:has(.dsh-environment-tray-entry) { position: relative; padding-top: 10px; }
+[data-conversation-header-leading]:has(.dsh-environment-tray-entry) { min-height: 30px; }
+header[data-window-drag]:has(.dsh-environment-tray-entry) [data-conversation-header-corner] { padding-inline-start: 38px; }
+.dsh-environment-tray-entry { position: absolute; inset-inline-end: 50px; top: 10px; display: flex; align-items: center; -webkit-app-region: no-drag; }
 .dsh-environment-tray-dialog { width: min(1080px, calc(100vw - 48px)); max-width: none; }
 .dsh-environment-tray-row {
   display: grid;
