@@ -20,7 +20,7 @@ GitHub 的 [`Release checks`](https://github.com/songshuhuoban/dsh-environment-t
 
 1. 确认 `package.json` 中的包名、版本和 `engines.dsh` 范围。用 `npm view dsh-environment-tray version --registry=https://registry.npmjs.org/` 查看已发布版本；新发布必须使用从未发布过的版本号。`engines.dsh` 应覆盖本次实测的 DSH 版本（当前为 `^0.2.0-rc.2`），范围外的版本会被 DSH 的兼容门拒绝安装；扩大范围前先在新版本上重跑桌面验证。
 2. 更新版本和变更说明，提交源码及生成的 `lib/`，推送到 `master`。等待 GitHub `Release checks` 通过。`cordis.patch.yml` 的包名与 `tsdown.config.ts` 的客户端 bundle ID 应保持一致。
-3. 在准备发布的提交上，本机执行 `pnpm install --frozen-lockfile` 和 `pnpm run release:check`。打包清单检查使用 dry-run；确认中英文介绍及 README 截图随包发布，插件介绍应说明「新会话或已有会话 → 右上角 → 环境变量双滑杆图标」。再执行 `pnpm run test:desktop`，让插件在已安装的桌面 Host 上以隔离 profile 跑一遍（当前针对 DSH `0.2.1-rc.2` 为 22 PASS / 0 FAIL），并在桌面客户端验证立即启用、新会话和已有会话打开弹窗，以及中英文介绍；源码构建成功不等于桌面集成验证通过。
+3. 在准备发布的提交上，本机执行 `pnpm install --frozen-lockfile` 和 `pnpm run release:check`。发布检查需在 Node 24 下运行：`verify-env-model.mjs` 的 `parseEnv` 差分以 DSH 运行时的 Node 24 为准，Node 22 的注释处理不同会判失败；若 Volta 把 pnpm 绑在旧 Node，先让 pnpm 跑在 Node 24 上。打包清单检查使用 dry-run；确认中英文介绍及 README 截图随包发布，插件介绍应说明「新会话或已有会话 → 右上角 → 环境变量双滑杆图标」。再执行 `pnpm run test:desktop`，让插件在已安装的桌面 Host 上以隔离 profile 跑一遍（当前针对 DSH `0.2.1-rc.2` 为 22 PASS / 0 FAIL），并在桌面客户端验证立即启用、新会话和已有会话打开弹窗，以及中英文介绍；源码构建成功不等于桌面集成验证通过。
 4. 用有该包发布权限的 npm 账号登录官方 registry：`npm login --registry=https://registry.npmjs.org/`，并用 `npm whoami --registry=https://registry.npmjs.org/` 确认账号。在仓库根目录运行 `npm publish`，按 npm CLI 提示完成浏览器验证或输入一次性验证码。`prepublishOnly` 会重跑发布检查，`prepack` 会重建 `lib/`。
 5. 用 `npm view dsh-environment-tray@<版本> version --registry=https://registry.npmjs.org/` 确认发布成功。然后给**刚发布的提交**创建对应版本标签，并推送标签。更新本文的发布状态，再按 README 的桌面客户端步骤填入 `dsh-environment-tray` 安装验证。升级测试需先卸载旧版，再安装新版；DSH 的桌面 `desktop` 与命令行 `web` profile 相互隔离。
 

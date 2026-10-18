@@ -10,7 +10,7 @@
 
 import { parseEnv } from 'node:util'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import {
   parseDotEnv,
@@ -423,12 +423,17 @@ console.log('\n--- BOM handling ---')
   rmSync(bomScratch, { recursive: true, force: true })
 }
 
-// ── 7. 禁止名单必须与 DSH 源码逐条一致（差分）───────────────────────────────
+// ── 7. 禁止名单必须与受支持的 DSH 源码逐条一致（差分）───────────────────────
 // 这是最强的一种断言：不是"我认为名单是这样的"，而是**从 DSH 自己的实现里
 // 提取权威名单**再比对。上游增删条目时，这条断言会立刻变红。
+//
+// 比对对象必须是本插件声明支持的 DSH（`engines.dsh: ^0.2.0-rc.2`）。本机
+// npx 缓存里可能留着别的版本，与它比对只会得到假红/假绿，所以版本不符时
+// 直接跳过。`DSH_APP_BOOT_SOURCE` 可指向某个 `dsh-app-boot/lib/index.js`，
+// 用于比对指定的 DSH 源码树。
 console.log('\n--- denylist fidelity vs DSH source ---')
 {
-  const DSH_APP_BOOT = join(
+  const DSH_APP_BOOT = process.env.DSH_APP_BOOT_SOURCE ?? join(
     'C:',
     'Users',
     'qq651',
@@ -443,6 +448,8 @@ console.log('\n--- denylist fidelity vs DSH source ---')
     'lib',
     'index.js',
   )
+  /** 本插件声明支持的 DSH 版本段（`engines.dsh: ^0.2.0-rc.2`）。 */
+  const SUPPORTED_DSH = /^0\.2\./
 
   let src
   try {
@@ -451,8 +458,20 @@ console.log('\n--- denylist fidelity vs DSH source ---')
     src = undefined
   }
 
+  /** 读取上游包版本：`lib/index.js` 的上一级就是包根。 */
+  let upstreamVersion
+  if (src !== undefined) {
+    try {
+      upstreamVersion = JSON.parse(readFileSync(join(dirname(DSH_APP_BOOT), '..', 'package.json'), 'utf8')).version
+    } catch {
+      upstreamVersion = undefined
+    }
+  }
+
   if (src === undefined) {
     console.log('SKIP  DSH 源码不在预期路径，跳过差分比对')
+  } else if (!SUPPORTED_DSH.test(String(upstreamVersion))) {
+    console.log(`SKIP  DSH 源码版本为 ${String(upstreamVersion)}，不是受支持的 0.2.x，跳过差分比对`)
   } else {
     /** 从形如 `const NAME = new Set([ ... ])` 的源码里抽出字符串字面量。 */
     const extractSet = (source, constName) => {
@@ -468,26 +487,30 @@ console.log('\n--- denylist fidelity vs DSH source ---')
     const upstreamPrefixes = extractSet(src, 'BOOTSTRAP_PREFIXES')
     const upstreamProxy = extractSet(src, 'HOME_LAYER_PROXY_NAMES')
 
-    ok('extracted the upstream BOOTSTRAP_NAMES list', Array.isArray(upstreamNames) && upstreamNames.length > 0, String(upstreamNames?.length))
-    ok('extracted the upstream BOOTSTRAP_PREFIXES list', Array.isArray(upstreamPrefixes), String(upstreamPrefixes))
+    if (!Array.isArray(upstreamNames) || !Array.isArray(upstreamPrefixes) || !Array.isArray(upstreamProxy)) {
+      console.log('SKIP  DSH 源码里缺少完整的名单，跳过差分比对')
+    } else {
+      ok('extracted the upstream BOOTSTRAP_NAMES list', upstreamNames.length > 0, String(upstreamNames.length))
+      ok('extracted the upstream BOOTSTRAP_PREFIXES list', upstreamPrefixes.length > 0, String(upstreamPrefixes.length))
 
-    // 逐条比对（顺序无关，因为两者都是集合语义）
-    const ours = [...BOOTSTRAP_NAMES].sort()
-    const theirs = [...upstreamNames].sort()
-    const missing = theirs.filter((n) => !ours.includes(n))
-    const extra = ours.filter((n) => !theirs.includes(n))
-    ok('our BOOTSTRAP_NAMES is not missing any upstream entry', missing.length === 0, `missing: ${missing.join(',')}`)
-    ok('our BOOTSTRAP_NAMES has no entries DSH does not reject', extra.length === 0, `extra: ${extra.join(',')}`)
-    ok('BOOTSTRAP_NAMES matches upstream exactly', JSON.stringify(ours) === JSON.stringify(theirs), `${String(ours.length)} vs ${String(theirs.length)}`)
+      // 逐条比对（顺序无关，因为两者都是集合语义）
+      const ours = [...BOOTSTRAP_NAMES].sort()
+      const theirs = [...upstreamNames].sort()
+      const missing = theirs.filter((n) => !ours.includes(n))
+      const extra = ours.filter((n) => !theirs.includes(n))
+      ok('our BOOTSTRAP_NAMES is not missing any upstream entry', missing.length === 0, `missing: ${missing.join(',')}`)
+      ok('our BOOTSTRAP_NAMES has no entries DSH does not reject', extra.length === 0, `extra: ${extra.join(',')}`)
+      ok('BOOTSTRAP_NAMES matches upstream exactly', JSON.stringify(ours) === JSON.stringify(theirs), `${String(ours.length)} vs ${String(theirs.length)}`)
 
-    const ourPrefixes = [...BOOTSTRAP_PREFIXES].sort()
-    const theirPrefixes = [...upstreamPrefixes].sort()
-    ok('BOOTSTRAP_PREFIXES matches upstream exactly', JSON.stringify(ourPrefixes) === JSON.stringify(theirPrefixes), `${JSON.stringify(ourPrefixes)} vs ${JSON.stringify(theirPrefixes)}`)
+      const ourPrefixes = [...BOOTSTRAP_PREFIXES].sort()
+      const theirPrefixes = [...upstreamPrefixes].sort()
+      ok('BOOTSTRAP_PREFIXES matches upstream exactly', JSON.stringify(ourPrefixes) === JSON.stringify(theirPrefixes), `${JSON.stringify(ourPrefixes)} vs ${JSON.stringify(theirPrefixes)}`)
 
-    const ourProxy = [...HOME_LAYER_PROXY_NAMES].sort()
-    const theirProxy = [...upstreamProxy].sort()
-    ok('HOME_LAYER_PROXY_NAMES matches upstream exactly', JSON.stringify(ourProxy) === JSON.stringify(theirProxy), `${JSON.stringify(ourProxy)} vs ${JSON.stringify(theirProxy)}`)
-    ok('prefixes are all uppercase (matching is case-folded)', BOOTSTRAP_PREFIXES.every((p) => p === p.toUpperCase()))
+      const ourProxy = [...HOME_LAYER_PROXY_NAMES].sort()
+      const theirProxy = [...upstreamProxy].sort()
+      ok('HOME_LAYER_PROXY_NAMES matches upstream exactly', JSON.stringify(ourProxy) === JSON.stringify(theirProxy), `${JSON.stringify(ourProxy)} vs ${JSON.stringify(theirProxy)}`)
+      ok('prefixes are all uppercase (matching is case-folded)', BOOTSTRAP_PREFIXES.every((p) => p === p.toUpperCase()))
+    }
   }
 }
 
