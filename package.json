@@ -1,6 +1,6 @@
 {
   "name": "dsh-environment-tray",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Environment Variable Manager for DeepSeek Harness. Manage .env files, runtime variables, credentials, and Windows user and system environment variables from the sliders icon at the top right of a new or existing chat.",
   "repository": {
     "type": "git",
@@ -47,6 +47,9 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=4.0.2 <5"
+  },
+  "engines": {
+    "dsh": "^0.2.0-rc.2"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.4",
